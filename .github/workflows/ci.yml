@@ -2,39 +2,105 @@ name: Chariot CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, 'dev/**', 'feature/**' ]
   pull_request:
     branches: [ main ]
+
+# Required to push images to GitHub Container Registry (GHCR)
+permissions:
+  contents: read
+  packages: write
 
 jobs:
   test-hub:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-          cache: 'npm'
-          cache-dependency-path: hub/package-lock.json
-      - name: Install Hub Dependencies
-        run: cd hub && npm install --legacy-peer-deps
-      - name: Hub Build Check
-        run: cd hub && npm run build
-      - name: Hub Tests
-        run: cd hub && npm test
+        - uses: actions/checkout@v6
+        - name: Setup Node.js
+          uses: actions/setup-node@v6
+          with:
+            node-version: '24'
+            cache: 'npm'
+            cache-dependency-path: hub/package-lock.json
+        - name: Install Hub Dependencies
+          run: cd hub && npm install --legacy-peer-deps
+        - name: Hub Build Check
+          run: cd hub && npm run build
+        - name: Hub Tests
+          run: |
+            cd hub && npm test
+            echo "### Hub Unit Tests Summary" >> $GITHUB_STEP_SUMMARY
+            echo "✅ All unit tests passed on Node.js 24." >> $GITHUB_STEP_SUMMARY
 
   test-agent:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-          cache: 'npm'
-          cache-dependency-path: agent/package-lock.json
-      - name: Install Agent Dependencies
-        run: cd agent && npm install --legacy-peer-deps
-      - name: Agent Tests
-        run: cd agent && npm test
+        - uses: actions/checkout@v6
+        - name: Setup Node.js
+          uses: actions/setup-node@v6
+          with:
+            node-version: '24'
+            cache: 'npm'
+            cache-dependency-path: agent/package-lock.json
+        - name: Install Agent Dependencies
+          run: cd agent && npm install --legacy-peer-deps
+        - name: Agent Tests
+          run: |
+            cd agent && npm test
+            echo "### Agent Monitoring Tests Summary" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Handshake and telemetry verification passed." >> $GITHUB_STEP_SUMMARY
+
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: [test-hub, test-agent]
+    steps:
+        - uses: actions/checkout@v6
+        
+        - name: Generate Version & Determine Tags
+          id: versioning
+          run: |
+            # Generate short SHA for the version tag
+            SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+            VERSION="0.1.0-$SHORT_SHA"
+            echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+            
+            # Determine if this is a main release or dev build
+            if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+              echo "TAG_LATEST=latest" >> $GITHUB_OUTPUT
+              echo "### 🚀 Production Release: $VERSION" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "TAG_LATEST=dev-latest" >> $GITHUB_OUTPUT
+              echo "### 🛠️ Development Build: $VERSION" >> $GITHUB_STEP_SUMMARY
+            fi
+
+        - name: Log in to GHCR
+          uses: docker/login-action@v3
+          with:
+            registry: ghcr.io
+            username: ${{ github.actor }}
+            password: ${{ secrets.GITHUB_TOKEN }}
+
+        - name: Build and Push Hub Container
+          uses: docker/build-push-action@v6
+          with:
+            context: ./hub
+            push: true
+            tags: |
+              ghcr.io/${{ github.repository_owner }}/chariot-hub:${{ steps.versioning.outputs.TAG_LATEST }}
+              ghcr.io/${{ github.repository_owner }}/chariot-hub:${{ steps.versioning.outputs.VERSION }}
+
+        - name: Build and Push Agent Container
+          uses: docker/build-push-action@v6
+          with:
+            context: ./agent
+            push: true
+            tags: |
+              ghcr.io/${{ github.repository_owner }}/chariot-agent:${{ steps.versioning.outputs.TAG_LATEST }}
+              ghcr.io/${{ github.repository_owner }}/chariot-agent:${{ steps.versioning.outputs.VERSION }}
+        
+        - name: Summary Report
+          run: |
+            echo "### Registry Detailed Links" >> $GITHUB_STEP_SUMMARY
+            echo "- **Tag Applied**: \`${{ steps.versioning.outputs.TAG_LATEST }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **Hub Image**: [ghcr.io/${{ github.repository_owner }}/chariot-hub](https://github.com/${{ github.repository_owner }}/package/chariot-hub)" >> $GITHUB_STEP_SUMMARY
+            echo "- **Agent Image**: [ghcr.io/${{ github.repository_owner }}/chariot-agent](https://github.com/${{ github.repository_owner }}/package/chariot-agent)" >> $GITHUB_STEP_SUMMARY
