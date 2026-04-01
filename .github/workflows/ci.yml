@@ -11,6 +11,10 @@ permissions:
   contents: read
   packages: write
 
+# Opt into the Node.js 24 runtime for all JavaScript-based actions
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   test-hub:
     runs-on: ubuntu-latest
