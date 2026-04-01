@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  hub:
+    build:
+      context: ./hub
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - SHARED_SECRET=chariot-production-secret-2024
+      - NODE_ENV=production
+    networks:
+      - chariot-net
+
+  agent:
+    build:
+      context: ./agent
+      dockerfile: Dockerfile
+    environment:
+      - HUB_URL=http://hub:3000
+      - SHARED_SECRET=chariot-production-secret-2024
+      - CLUSTER_NAME=docker-desktop-cluster
+      - REPORT_INTERVAL=10000
+    depends_on:
+      - hub
+    networks:
+      - chariot-net
+
+networks:
+  chariot-net:
+    driver: bridge
