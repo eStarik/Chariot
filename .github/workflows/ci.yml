@@ -18,7 +18,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: hub/package-lock.json
       - name: Install Hub Dependencies
-        run: cd hub && npm install
+        run: cd hub && npm install --legacy-peer-deps
       - name: Hub Build Check
         run: cd hub && npm run build
       - name: Hub Tests
@@ -35,6 +35,6 @@ jobs:
           cache: 'npm'
           cache-dependency-path: agent/package-lock.json
       - name: Install Agent Dependencies
-        run: cd agent && npm install
+        run: cd agent && npm install --legacy-peer-deps
       - name: Agent Tests
         run: cd agent && npm test

@@ -10,18 +10,18 @@
     "test": "vitest"
   },
   "dependencies": {
-    "next": "^15.5.14",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "next": "^16.2.2",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
     "@kubernetes/client-node": "^1.4.0",
-    "lucide-react": "^0.363.0",
+    "lucide-react": "^1.7.0",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
     "typescript": "^6.0.2",
     "@types/node": "^22.13.5",
-    "@types/react": "^19.0.10",
-    "@types/react-dom": "^19.0.4",
+    "@types/react": "^19.2.1",
+    "@types/react-dom": "^19.2.1",
     "vitest": "^4.1.2",
     "@vitejs/plugin-react": "^6.0.1",
     "@playwright/test": "^1.43.1"
