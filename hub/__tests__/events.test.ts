@@ -1,9 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-// @ts-ignore
-import { saveClusterReport, clearRegistry } from '../src/lib/registry';
-// We'll implement this event emitter for SSE
-// @ts-ignore
-import { subscribeToEvents, broadcastUpdate } from '../src/lib/events';
+import { clearRegistry } from '../src/lib/registry';
+import { subscribeToEvents, broadcastAgentUpdate } from '../src/lib/events';
 
 describe('Hub Event Broadcasting (SSE)', () => {
   beforeEach(() => {
@@ -16,16 +13,19 @@ describe('Hub Event Broadcasting (SSE)', () => {
     const unsubscribe = subscribeToEvents(broadcastSpy);
 
     const agentId = 'agent-123';
-    const report = { resources: { cpuTotal: 4 }, fleets: [] };
+    const telemetryPayload = { 
+      resources: { cpu: { capacity: '4', usage: '1' }, memory: { capacity: '16', usage: '2' } }, 
+      fleets: [] 
+    };
     
-    // Simulate the broadcast that should happen in the API route
-    broadcastUpdate(agentId, report);
+    // Simulate the broadcast normally triggered by the Telemetry Ingestion route
+    broadcastAgentUpdate(agentId, telemetryPayload);
 
     expect(broadcastSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'CLUSTER_UPDATE',
         agentId: 'agent-123',
-        data: report
+        payload: telemetryPayload
       })
     );
 
