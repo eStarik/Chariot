@@ -4,7 +4,7 @@ COPY package.json package-lock.json* ./
 RUN npm install --legacy-peer-deps
 
 COPY . .
-RUN npx tsc --outDir dist
+RUN npm run build
 
 FROM node:24-alpine AS runner
 WORKDIR /app
