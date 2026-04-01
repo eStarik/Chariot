@@ -56,9 +56,13 @@ jobs:
     steps:
         - uses: actions/checkout@v6
         
-        - name: Generate Version & Determine Tags
+        - name: Generate Version & Standardize Tags
           id: versioning
           run: |
+            # Standardize registry path to lowercase for Docker compatibility
+            REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+            echo "REPO_LOWER=$REPO_LOWER" >> $GITHUB_OUTPUT
+
             # Generate short SHA for the version tag
             SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
             VERSION="0.1.0-$SHORT_SHA"
@@ -86,8 +90,8 @@ jobs:
             context: ./hub
             push: true
             tags: |
-              ghcr.io/${{ github.repository_owner }}/chariot-hub:${{ steps.versioning.outputs.TAG_LATEST }}
-              ghcr.io/${{ github.repository_owner }}/chariot-hub:${{ steps.versioning.outputs.VERSION }}
+              ghcr.io/${{ steps.versioning.outputs.REPO_LOWER }}-hub:${{ steps.versioning.outputs.TAG_LATEST }}
+              ghcr.io/${{ steps.versioning.outputs.REPO_LOWER }}-hub:${{ steps.versioning.outputs.VERSION }}
 
         - name: Build and Push Agent Container
           uses: docker/build-push-action@v6
@@ -95,12 +99,12 @@ jobs:
             context: ./agent
             push: true
             tags: |
-              ghcr.io/${{ github.repository_owner }}/chariot-agent:${{ steps.versioning.outputs.TAG_LATEST }}
-              ghcr.io/${{ github.repository_owner }}/chariot-agent:${{ steps.versioning.outputs.VERSION }}
+              ghcr.io/${{ steps.versioning.outputs.REPO_LOWER }}-agent:${{ steps.versioning.outputs.TAG_LATEST }}
+              ghcr.io/${{ steps.versioning.outputs.REPO_LOWER }}-agent:${{ steps.versioning.outputs.VERSION }}
         
         - name: Summary Report
           run: |
             echo "### Registry Detailed Links" >> $GITHUB_STEP_SUMMARY
             echo "- **Tag Applied**: \`${{ steps.versioning.outputs.TAG_LATEST }}\`" >> $GITHUB_STEP_SUMMARY
-            echo "- **Hub Image**: [ghcr.io/${{ github.repository_owner }}/chariot-hub](https://github.com/${{ github.repository_owner }}/package/chariot-hub)" >> $GITHUB_STEP_SUMMARY
-            echo "- **Agent Image**: [ghcr.io/${{ github.repository_owner }}/chariot-agent](https://github.com/${{ github.repository_owner }}/package/chariot-agent)" >> $GITHUB_STEP_SUMMARY
+            echo "- **Hub Image**: [ghcr.io/${{ steps.versioning.outputs.REPO_LOWER }}-hub](https://github.com/${{ github.repository }}/package/chariot-hub)" >> $GITHUB_STEP_SUMMARY
+            echo "- **Agent Image**: [ghcr.io/${{ steps.versioning.outputs.REPO_LOWER }}-agent](https://github.com/${{ github.repository }}/package/chariot-agent)" >> $GITHUB_STEP_SUMMARY
