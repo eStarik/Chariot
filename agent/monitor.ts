@@ -26,8 +26,8 @@ export interface FleetSummary {
  */
 export async function getClusterCapacity(): Promise<ClusterCapacity> {
   // Fetch infrastructure state
-  const { body: nodes } = await coreApi.listNode();
-  const { body: pods } = await coreApi.listPodForAllNamespaces();
+  const nodes = await coreApi.listNode();
+  const pods = await coreApi.listPodForAllNamespaces();
 
   let cpuTotal = 0;
   let ramTotal = 0; // Unit: GiB
@@ -72,9 +72,13 @@ export async function getAgonesFleetSummary(targetNamespaces: string[]): Promise
   
   try {
     // Agones CRDs follow the agones.dev/v1 group/version
-    const response = await customObjectsApi.listClusterCustomObject('agones.dev', 'v1', 'fleets') as { body: { items: any[] } };
+    const response = await customObjectsApi.listClusterCustomObject({
+      group: 'agones.dev',
+      version: 'v1',
+      plural: 'fleets'
+    }) as { items: any[] };
     
-    for (const item of response.body.items) {
+    for (const item of response.items) {
       const ns = item.metadata.namespace;
       if (targetNamespaces.includes(ns)) {
         summarizedFleets.push({
