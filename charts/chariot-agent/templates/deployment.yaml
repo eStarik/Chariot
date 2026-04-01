@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "chariot-agent.fullname" . }}
+  labels:
+    {{- include "chariot-agent.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "chariot-agent.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "chariot-agent.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- if .Values.rbac.create }}
+      serviceAccountName: {{ include "chariot-agent.fullname" . }}
+      {{- end }}
+      containers:
+      - name: agent
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: HUB_URL
+          value: {{ .Values.hub.url | quote }}
+        - name: SHARED_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.hub.existingSecret | default (printf "%s-hub-secret" (include "chariot-agent.fullname" .)) }}
+              key: sharedSecret
+        - name: CLUSTER_NAME
+          value: {{ .Values.cluster.name | quote }}
+        - name: REPORT_INTERVAL_MS
+          value: {{ .Values.reportIntervalMs | quote }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        livenessProbe:
+          exec:
+            command:
+            - pgrep
+            - -f
+            - "node index.ts"
+          initialDelaySeconds: 30
+          periodSeconds: 60
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}

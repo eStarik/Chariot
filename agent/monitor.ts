@@ -1,10 +1,10 @@
 import * as k8s from '@kubernetes/client-node';
 
-const kc = new k8s.KubeConfig();
-kc.loadFromDefault();
+const kubeConfig = new k8s.KubeConfig();
+kubeConfig.loadFromDefault();
 
-const k8sApi = kc.makeApiClient(k8s.CoreV1Api);
-const customApi = kc.makeApiClient(k8s.CustomObjectsApi);
+const coreApi = kubeConfig.makeApiClient(k8s.CoreV1Api);
+const customObjectsApi = kubeConfig.makeApiClient(k8s.CustomObjectsApi);
 
 export interface ClusterCapacity {
   cpuTotal: number;
@@ -21,28 +21,30 @@ export interface FleetSummary {
 }
 
 /**
- * Fetches the total and current requested CPU/RAM of the cluster nodes.
+ * Aggregates cluster-wide resource capacity and current request-based usage.
+ * Scans all nodes and running pods across all namespaces.
  */
 export async function getClusterCapacity(): Promise<ClusterCapacity> {
-  const nodes = await k8sApi.listNode();
-  const pods = await k8sApi.listPodForAllNamespaces();
+  // Fetch infrastructure state
+  const { body: nodes } = await coreApi.listNode();
+  const { body: pods } = await coreApi.listPodForAllNamespaces();
 
   let cpuTotal = 0;
-  let ramTotal = 0; // In GiB
+  let ramTotal = 0; // Unit: GiB
   let cpuUsed = 0;
-  let ramUsed = 0; // In GiB
+  let ramUsed = 0; // Unit: GiB
 
-  // Sum node capacities
-  for (const node of nodes.body.items) {
-    const cpu = node.status?.capacity?.cpu || '0';
-    const mem = node.status?.capacity?.memory || '0Ki';
+  // Accumulate node-level capacity
+  for (const node of nodes.items) {
+    const cpuValue = node.status?.capacity?.cpu || '0';
+    const memValue = node.status?.capacity?.memory || '0Ki';
     
-    cpuTotal += parseInt(cpu);
-    ramTotal += parseK8sMemory(mem);
+    cpuTotal += parseK8sCpu(cpuValue);
+    ramTotal += parseK8sMemory(memValue);
   }
 
-  // Sum pod resource requests
-  for (const pod of pods.body.items) {
+  // Accumulate pod-level resource requests (as a proxy for usage)
+  for (const pod of pods.items) {
     if (pod.status?.phase === 'Running') {
       for (const container of pod.spec?.containers || []) {
         const cpuReq = container.resources?.requests?.cpu || '0';
@@ -56,51 +58,54 @@ export async function getClusterCapacity(): Promise<ClusterCapacity> {
 
   return {
     cpuTotal,
-    ramTotal: Math.round(ramTotal * 100) / 100,
-    cpuUsed: Math.round(cpuUsed * 100) / 100,
-    ramUsed: Math.round(ramUsed * 100) / 100
+    ramTotal: Number(ramTotal.toFixed(2)),
+    cpuUsed: Number(cpuUsed.toFixed(2)),
+    ramUsed: Number(ramUsed.toFixed(2))
   };
 }
 
 /**
- * Fetches the status of Agones fleets in the specified namespaces.
+ * Discovers and summarizes Agones fleet health within specified namespaces.
  */
-export async function getAgonesFleetSummary(namespaces: string[]): Promise<FleetSummary[]> {
-  const fleets: FleetSummary[] = [];
+export async function getAgonesFleetSummary(targetNamespaces: string[]): Promise<FleetSummary[]> {
+  const summarizedFleets: FleetSummary[] = [];
   
   try {
-    const response: any = await customApi.listClusterCustomObject('agones.dev', 'v1', 'fleets');
+    // Agones CRDs follow the agones.dev/v1 group/version
+    const response = await customObjectsApi.listClusterCustomObject('agones.dev', 'v1', 'fleets') as { body: { items: any[] } };
     
     for (const item of response.body.items) {
-      if (namespaces.includes(item.metadata.namespace)) {
-        fleets.push({
+      const ns = item.metadata.namespace;
+      if (targetNamespaces.includes(ns)) {
+        summarizedFleets.push({
           fleetName: item.metadata.name,
-          namespace: item.metadata.namespace,
+          namespace: ns,
           ready: item.status?.readyReplicas || 0,
           allocated: item.status?.allocatedReplicas || 0
         });
       }
     }
-  } catch (err) {
-    console.error('Error fetching Agones fleets:', err);
+  } catch (error) {
+    console.error('[Monitor] Failed to retrieve Agones fleets:', error instanceof Error ? error.message : error);
   }
 
-  return fleets;
+  return summarizedFleets;
 }
 
-// Utility functions for K8s unit conversion
+/**
+ * Standardizes K8s memory strings (e.g., '64Mi', '8Gi') into Gigabytes (GiB).
+ */
 function parseK8sMemory(memStr: string): number {
-  const unit = memStr.slice(-2);
   const value = parseInt(memStr);
-  if (unit === 'Gi') return value;
-  if (unit === 'Mi') return value / 1024;
-  if (unit === 'Ki') return value / (1024 * 1024);
-  const singleUnit = memStr.slice(-1);
-  if (singleUnit === 'G') return value;
-  if (singleUnit === 'M') return value / 1024;
-  return value / (1024 * 1024 * 1024);
+  if (memStr.endsWith('Gi') || memStr.endsWith('G')) return value;
+  if (memStr.endsWith('Mi') || memStr.endsWith('M')) return value / 1024;
+  if (memStr.endsWith('Ki') || memStr.endsWith('K')) return value / (1024 * 1024);
+  return value / (1024 * 1024 * 1024); // Assume raw bytes
 }
 
+/**
+ * Standardizes K8s CPU strings (e.g., '500m', '2') into core counts.
+ */
 function parseK8sCpu(cpuStr: string): number {
   if (cpuStr.endsWith('m')) {
     return parseInt(cpuStr) / 1000;

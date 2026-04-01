@@ -1,74 +1,59 @@
 # Chariot API Specifications v1
 
-## 🛡️ Authentication Protocol (Shared Secret & Agent Token)
+## 🛡️ Security Architecture
 
-All initial communication between the **Agent (Spoke)** and the **Hub (Coordinator)** is secured using a `SHARED_SECRET`.
+State-management between **Spoke Agents** and the **HUB Coordinator** utilizes a two-tier authentication handshake.
 
-1.  **Shared Secret**: Used for the *initial* registration only.
-2.  **Agent Token**: A unique, high-entropy token issued by the Hub upon first registration.
-3.  **Persistent ID**: The `AGENT_ID` provided by the Hub must be stored by the Agent.
-4.  **Impersonation Protection**: All subsequent calls (re-connection or reporting) MUST include the `AGENT_TOKEN` matching the `AGENT_ID`.
+1.  **Provisioning Phase**: Initial handshake requires a `SHARED_SECRET` (symmetric).
+2.  **Operational Phase**: All subsequent telemetry is authorized via a high-entropy `AGENT_TOKEN` issued during provisioning.
+3.  **Identity Persistence**: Agents MUST persist the `AGENT_ID` and `AGENT_TOKEN` locally to support session resumption across restarts.
 
 ---
 
-## 🛰️ Chariot-Agent -> Hub (Egress)
+## 🛰️ Agent Telemetry (Egress)
 
-### 🤝 1. Agent Registration
-**Endpoint**: `POST /api/v1/register`
-**Purpose**: Registers the agent and obtains a unique identifier and token.
+### 🤝 Identity Handshake
+**Endpoint**: `POST /api/v1/register`  
+**Description**: Provision or resume an agent identity.
 
-**Request Body (Initial)**:
+**Handshake Payload**:
 ```json
 {
   "secret": "string",
+  "agent_id": "uuid-v4 (optional)",
   "metadata": {
-    "cluster_name": "string",
+    "clusterName": "string",
     "region": "string"
   }
 }
 ```
 
-**Request Body (Re-connection)**:
+**HUB Response (201 Created)**:
 ```json
 {
   "agent_id": "uuid-v4",
-  "secret": "string", 
-  "metadata": { "cluster_name": "string" }
+  "agent_token": "sha256-string",
+  "status": "registered"
 }
 ```
 
-**Response (201 Created)**:
+### 📊 Telemetry Ingestion
+**Endpoint**: `POST /api/v1/report`  
+**Permissions**: `X-Agent-ID` and `X-Agent-Token` headers required.
+
+**Telemetry Payload**:
 ```json
 {
-  "agent_id": "uuid-v4",
-  "agent_token": "secure-random-token",
-  "expires_in": 3600
-}
-```
-
-### 📊 2. Resource Reporting
-**Endpoint**: `POST /api/v1/report`
-**Headers**:
-- `X-Agent-ID`: `uuid-v4`
-- `X-Agent-Token`: `secure-random-token`
-
-**Request Body**:
-```json
-{
-  "timestamp": "iso8601",
   "resources": {
-    "cpu_total": "number",
-    "cpu_used": "number",
-    "ram_total": "number",
-    "ram_used": "number",
-    "storage_total": "number",
-    "storage_used": "number"
+    "cpu": { "capacity": "string", "usage": "string" },
+    "memory": { "capacity": "string", "usage": "string" }
   },
-  "namespaces": [
+  "fleets": [
     {
       "name": "string",
-      "fleet_count": 5,
-      "gameserver_count": 25
+      "replicas": 10,
+      "readyReplicas": 8,
+      "allocatedReplicas": 2
     }
   ]
 }
@@ -76,12 +61,18 @@ All initial communication between the **Agent (Spoke)** and the **Hub (Coordinat
 
 ---
 
-## 🛠️ Hub -> Chariot-Agent (Ingress)
+## 💻 Dashboard Integration (Ingress)
 
-### 📈 3. Resource Visualization
-**Purpose**: The Hub queries the Agent for real-time fleet details.
+### 📈 Live Event Stream
+**Endpoint**: `GET /api/v1/events`  
+**Protocol**: Server-Sent Events (SSE)
 
-**Endpoint (Agent-side)**: `GET /api/v1/agent-status`
-**Auth Required**: `X-Agent-Token` header.
-
-**Output**: JSON list of Agones Fleets, GameServers, and FleetAutoscalers found in the scoped namespaces.
+**Event Payload**:
+```json
+{
+  "type": "CLUSTER_UPDATE",
+  "agentId": "uuid-v4",
+  "timestamp": 1711974000000,
+  "payload": { ...ClusterReport }
+}
+```

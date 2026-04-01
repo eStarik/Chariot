@@ -1,0 +1,29 @@
+replicaCount: 1
+
+image:
+  repository: chariot-agent
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+hub:
+  url: "http://chariot-hub.monitoring.svc.cluster.local"
+  sharedSecret: "CHANGE_ME"
+
+cluster:
+  name: "agones-cluster-01"
+  # Optional: use a dedicated node selector for Agones clusters
+  nodeSelector: {}
+
+reportIntervalMs: 5000
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+# Enable RBAC for reading Agones fleets and node capacity
+rbac:
+  create: true

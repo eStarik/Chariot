@@ -1,60 +1,91 @@
+/**
+ * In-memory state management for registered Agones Agents.
+ */
+
+export interface FleetStatus {
+  name: string;
+  replicas: number;
+  readyReplicas: number;
+  allocatedReplicas: number;
+}
+
+export interface ClusterResources {
+  cpu: { capacity: string; usage: string };
+  memory: { capacity: string; usage: string };
+}
+
+export interface ClusterReport {
+  resources: ClusterResources;
+  fleets: FleetStatus[];
+}
+
+export interface AgentMetadata {
+  clusterName?: string;
+  region?: string;
+  [key: string]: any;
+}
+
 export interface AgentRecord {
   agent_id: string;
   agent_token: string;
-  metadata: any;
+  metadata: AgentMetadata;
   lastReportTimestamp?: number;
-  resources?: any;
-  fleets?: any[];
+  resources?: ClusterResources;
+  fleets?: FleetStatus[];
 }
 
-let registry: Record<string, AgentRecord> = {};
+let agentRegistry: Record<string, AgentRecord> = {};
 
 /**
- * Registers an agent in the local registry.
+ * Registers an agent in the local store.
  */
-export function registerAgent(agent_id: string, metadata: any, agent_token: string): AgentRecord {
+export function registerAgent(
+  agentId: string, 
+  metadata: AgentMetadata, 
+  agentToken: string
+): AgentRecord {
   const record: AgentRecord = {
-    agent_id,
-    agent_token,
+    agent_id: agentId,
+    agent_token: agentToken,
     metadata
   };
   
-  registry[agent_id] = record;
+  agentRegistry[agentId] = record;
   return record;
 }
 
 /**
  * Retrieves an agent record by ID.
  */
-export function getAgent(agent_id: string): AgentRecord | undefined {
-  return registry[agent_id];
+export function getAgent(agentId: string): AgentRecord | undefined {
+  return agentRegistry[agentId];
 }
 
 /**
- * Clears the registry (mainly for testing).
+ * Clears all registered agents (primarily for testing).
  */
 export function clearRegistry(): void {
-  registry = {};
+  agentRegistry = {};
 }
 
 /**
  * Persists a resource report for a specific agent.
- * Requires validation of the agentToken.
+ * Validates identity via agentToken prior to update.
  */
 export async function saveClusterReport(
   agentId: string, 
-  report: any, 
+  report: ClusterReport, 
   agentToken: string
 ): Promise<{ success: boolean; error?: string }> {
-  const agent = registry[agentId];
+  const agent = agentRegistry[agentId];
   
   if (!agent) {
-    return { success: false, error: 'Agent not found' };
+    return { success: false, error: 'Agent record not found' };
   }
 
-  // Impersonation Protection
+  // Security check: Verify the reporter is indeed the registered owner of this ID
   if (agent.agent_token !== agentToken) {
-    return { success: false, error: 'Invalid agent token' };
+    return { success: false, error: 'Security violation: Unauthorized agent token' };
   }
 
   agent.lastReportTimestamp = Date.now();
@@ -64,6 +95,9 @@ export async function saveClusterReport(
   return { success: true };
 }
 
-export function getRegistry() {
-  return registry;
+/**
+ * Returns a read-only snapshot of the current registry state.
+ */
+export function getRegistrySnapshot(): Record<string, AgentRecord> {
+  return { ...agentRegistry };
 }

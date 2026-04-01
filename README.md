@@ -10,7 +10,7 @@ The command center for your Agones fleets
 
 Chariot is a lightweight, high-performance web interface designed for managing and monitoring [Agones](https://agones.dev/) game server fleets on Kubernetes. 
 
-Currently in early development, the goal of this project is to provide game developers and server administrators with real-time orchestration and visibility into their multiplayer infrastructure without the need to rely solely on `kubectl`.
+Currently in early development, the goal of this project is to provide game developers and server administrators with real-time orchestration and visibility into their infrastructure without the need to rely solely on `kubectl`.
 
 ### [+] Planned Features
 
@@ -32,7 +32,7 @@ This project is licensed under the **Polyform Noncommercial 1.0.0** license. You
 **> For Professional and Commercial Use**
 If you intend to use Chariot in a corporate environment, at a game studio, or for any project intended for commercial advantage or monetary compensation, you must obtain a commercial license. 
 
-To purchase a commercial license, please contact: **[my email]**
+To purchase a commercial license, please contact: **fkamleit@gmail.com**
 
 ---
 // Built for the multiplayer community.

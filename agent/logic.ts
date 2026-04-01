@@ -2,7 +2,7 @@ import axios from 'axios';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
-const CONFIG_PATH = path.join(process.cwd(), 'agent.config.json');
+const PERSISTENT_CONFIG_PATH = path.join(process.cwd(), 'agent.config.json');
 
 export interface RegistrationResult {
   success: boolean;
@@ -11,32 +11,44 @@ export interface RegistrationResult {
   error?: string;
 }
 
+export interface AgentConfig {
+  agent_id: string;
+  agent_token: string;
+}
+
+export interface HandshakePayload {
+  secret: string;
+  agent_id?: string;
+  metadata: {
+    clusterName: string;
+    [key: string]: any;
+  };
+}
+
 /**
- * Registers the agent with the central Chariot Hub.
- * @param hubUrl The base URL of the Chariot Hub
- * @param secret The shared secret for authentication
- * @param existingAgentId The persistent agent ID if already registered
+ * Initiates the identity handshake with the central Chariot Hub.
+ * If an existingAgentId is provided, the Hub will attempt to resume the session.
  */
 export async function registerWithHub(hubUrl: string, secret: string, existingAgentId?: string): Promise<RegistrationResult> {
   try {
-    const payload: any = {
+    const handshakePayload: HandshakePayload = {
       secret,
       metadata: {
-        cluster_name: process.env.CLUSTER_NAME || 'unknown-cluster'
+        clusterName: process.env.CLUSTER_NAME || 'unknown-cluster'
       }
     };
 
     if (existingAgentId) {
-      payload.agent_id = existingAgentId;
+      handshakePayload.agent_id = existingAgentId;
     }
 
-    const response = await axios.post(`${hubUrl}/api/v1/register`, payload);
+    const hubResponse = await axios.post(`${hubUrl}/api/v1/register`, handshakePayload, { timeout: 10000 });
 
-    if (response.status === 201) {
-      const { agent_id, agent_token } = response.data;
+    if (hubResponse.status === 201) {
+      const { agent_id, agent_token } = hubResponse.data;
       
-      // Persist locally
-      await saveConfig({ agent_id, agent_token });
+      // Persist provisioned identifiers locally for resume support
+      await savePersistentConfig({ agent_id, agent_token });
 
       return {
         success: true,
@@ -45,31 +57,37 @@ export async function registerWithHub(hubUrl: string, secret: string, existingAg
       };
     }
 
-    return { success: false, error: 'Unexpected status code' };
+    return { success: false, error: `Hub rejected registration with status: ${hubResponse.status}` };
   } catch (error: any) {
     if (error.response) {
       return {
         success: false,
-        error: error.response.data?.error || 'Registration failed'
+        error: error.response.data?.error || 'Hub registration handshake failed'
       };
     }
-    return { success: false, error: error.message };
+    return { success: false, error: `Handshake network error: ${error.message}` };
   }
 }
 
-export async function loadConfig() {
+/**
+ * Loads the agent's identity configuration from the local filesystem.
+ */
+export async function loadPersistentConfig(): Promise<AgentConfig | null> {
   try {
-    const data = await fs.readFile(CONFIG_PATH, 'utf-8');
-    return JSON.parse(data);
+    const rawData = await fs.readFile(PERSISTENT_CONFIG_PATH, 'utf-8');
+    return JSON.parse(rawData) as AgentConfig;
   } catch (error) {
-    return null;
+    return null; // Config missing or unreadable
   }
 }
 
-export async function saveConfig(config: any) {
+/**
+ * Persists the agent's identity configuration to the local filesystem.
+ */
+export async function savePersistentConfig(config: AgentConfig): Promise<void> {
   try {
-    await fs.writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
+    await fs.writeFile(PERSISTENT_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
   } catch (error) {
-    console.error('Failed to save config:', error);
+    console.error('[Config] Critical error: Failed to persist agent configuration:', error);
   }
 }

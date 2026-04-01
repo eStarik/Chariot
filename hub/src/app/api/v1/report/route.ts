@@ -1,34 +1,38 @@
-import { NextResponse } from 'next/server';
-import { saveClusterReport } from '../../../../lib/registry';
-import { broadcastUpdate } from '../../../../lib/events';
+import { NextRequest, NextResponse } from 'next/server';
+import { saveClusterReport, ClusterReport } from '../../../../lib/registry';
+import { broadcastAgentUpdate } from '../../../../lib/events';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * Endpoint for Agents to push their status reports.
+ * Standard Telemetry Ingestion Endpoint
  * POST /api/v1/report
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const agentId = request.headers.get('X-Agent-ID');
     const agentToken = request.headers.get('X-Agent-Token');
-    const body = await request.json();
+    const telemetryPayload = await request.json() as ClusterReport;
 
     if (!agentId || !agentToken) {
-      return NextResponse.json({ error: 'Missing authentication headers' }, { status: 401 });
+      return NextResponse.json({ error: 'Authentication failed: Missing telemetry headers' }, { status: 401 });
     }
 
-    const result = await saveClusterReport(agentId, body, agentToken);
+    // Persist the incoming report in the registry
+    const persistenceResult = await saveClusterReport(agentId, telemetryPayload, agentToken);
 
-    if (result.success) {
-      // Broadcast the update to all connected UI clients (SSE)
-      broadcastUpdate(agentId, body);
+    if (persistenceResult.success) {
+      // Broadcast the validated update to all active SSE consumers
+      broadcastAgentUpdate(agentId, telemetryPayload);
       
-      return NextResponse.json({ success: true }, { status: 200 });
-    } else {
-      return NextResponse.json({ error: result.error }, { status: result.error === 'Agent not found' ? 404 : 401 });
+      return NextResponse.json({ status: 'received' }, { status: 200 });
     }
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+
+    // Handle authentication or registration mismatches
+    const status = persistenceResult.error?.includes('found') ? 404 : 401;
+    return NextResponse.json({ error: persistenceResult.error }, { status });
+  } catch (error) {
+    console.error('[Telemetry] Critical error in ingestion handler:', error);
+    return NextResponse.json({ error: 'Internal Telemetry Service Error' }, { status: 500 });
   }
 }

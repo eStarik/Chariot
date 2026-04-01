@@ -1,45 +1,58 @@
-import { NextResponse } from 'next/server';
-import { subscribeToEvents } from '../../../../lib/events';
+import { NextRequest } from 'next/server';
+import { subscribeToEvents, AgentUpdateEvent } from '../../../../lib/events';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * Event stream for the UI (SSE).
+ * Real-time Dashboard Update Stream (SSE)
  * GET /api/v1/events
  */
-export async function GET(request: Request) {
-  const stream = new ReadableStream({
+export async function GET(request: NextRequest) {
+  const textEncoder = new TextEncoder();
+
+  const eventStream = new ReadableStream({
     start(controller) {
-      const encoder = new TextEncoder();
-
-      // Subscribe to the local event system
-      const unsubscribe = subscribeToEvents((data) => {
-        const message = `data: ${JSON.stringify(data)}\n\n`;
-        controller.enqueue(encoder.encode(message));
+      // Subscribe to the global Hub event bus
+      const unsubscribeFromBus = subscribeToEvents((updateEvent: AgentUpdateEvent) => {
+        try {
+          const payload = `data: ${JSON.stringify(updateEvent)}\n\n`;
+          controller.enqueue(textEncoder.encode(payload));
+        } catch (error) {
+          console.error('[SSE] Failed to enqueue event update:', error);
+        }
       });
 
-      // Handle connection close
-      request.signal.addEventListener('abort', () => {
-        unsubscribe();
-        controller.close();
-      });
-
-      // Keep-alive every 15 seconds
-      const heartbeat = setInterval(() => {
-        controller.enqueue(encoder.encode(': heartbeat\n\n'));
+      // Maintain connection with a 15s heartbeat
+      const heartbeatSession = setInterval(() => {
+        try {
+          controller.enqueue(textEncoder.encode(': heartbeat\n\n'));
+        } catch (error) {
+          // If heartbeat fails, the connection is likely stale
+          clearInterval(heartbeatSession);
+        }
       }, 15000);
 
-      request.signal.addEventListener('abort', () => {
-        clearInterval(heartbeat);
-      });
+      // Unified Connection Cleanup
+      const terminateConnection = () => {
+        clearInterval(heartbeatSession);
+        unsubscribeFromBus();
+        try {
+          controller.close();
+        } catch (e) {
+          // Ignore errors during double-close
+        }
+      };
+
+      request.signal.addEventListener('abort', terminateConnection);
     },
   });
 
-  return new Response(stream, {
+  return new Response(eventStream, {
     headers: {
       'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
+      'Cache-Control': 'no-cache, no-transform',
       'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no', // Disable buffering for Nginx/Proxy
     },
   });
 }

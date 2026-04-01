@@ -1,0 +1,19 @@
+{{- if .Values.serviceMonitor && .Values.serviceMonitor.enabled -}}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "chariot-hub.fullname" . }}
+  labels:
+    {{- include "chariot-hub.labels" . | nindent 4 }}
+  {{- with .Values.serviceMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "chariot-hub.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: http
+      interval: {{ .Values.serviceMonitor.interval | default "30s" }}
+      path: {{ .Values.serviceMonitor.path | default "/api/metrics" }}
+{{- end }}

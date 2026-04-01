@@ -1,0 +1,6 @@
+apiVersion: v2
+name: chariot-hub
+description: Central coordinator for Agones cluster monitoring.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

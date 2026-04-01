@@ -4,36 +4,40 @@ import { validateRegistration } from '../../../../lib/auth';
 export const dynamic = 'force-dynamic';
 
 /**
- * Managed Agent Registration Endpoint
+ * Handshake endpoint for new and reconnecting agents.
  * POST /api/v1/register
  */
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const handshakeRequest = await req.json();
     
-    // Use the shared logic from our auth.ts
-    const result = await validateRegistration(body);
+    // Validate identity via centralized auth logic
+    const handshakeResult = await validateRegistration(handshakeRequest);
 
-    if (!result.success) {
+    if (!handshakeResult.success) {
+      const isMissingSecret = handshakeResult.error?.includes('Missing');
       return NextResponse.json(
-        { error: result.error },
-        { status: result.error === 'Missing shared secret' ? 400 : 401 }
+        { error: handshakeResult.error },
+        { status: isMissingSecret ? 400 : 401 }
       );
     }
 
-    // In a real application, we would persist this in a DB linked to the cluster metadata
-    console.log(`[Hub] New Agent Registered: ${result.agent_id} for Cluster: ${body.metadata?.cluster_name}`);
+    const clusterName = handshakeRequest.metadata?.clusterName || 'unknown-cluster';
+    console.info(`[Identity] Provisioned identity for agent: ${handshakeResult.agent_id} (Cluster: ${clusterName})`);
 
+    // Return the provisioned identifiers required for subsequent reporting
     return NextResponse.json(
       { 
-        agent_id: result.agent_id,
-        expires_in: 3600 
+        agent_id: handshakeResult.agent_id,
+        agent_token: handshakeResult.agent_token,
+        status: 'registered'
       },
       { status: 201 }
     );
   } catch (error) {
+    console.error('[Identity] Critical error in registration handler:', error);
     return NextResponse.json(
-      { error: 'Internal Server Error' },
+      { error: 'Internal Identity Service Error' },
       { status: 500 }
     );
   }

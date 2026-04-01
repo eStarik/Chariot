@@ -1,60 +1,52 @@
-# Chariot Function Logic Specifications
+# Chariot | Function Specification
 
-This document defines the "Phase 0" design for every core function in Chariot.
-
----
-
-## 🏗️ 1. Authentication & Registration (Revised)
-
-### `validateRegistration(payload: any)`
-**Location**: `hub/src/lib/auth.ts`
-**Purpose**: Validates an agent's request to join and issues persistent credentials.
-
-- **Input Parameters**:
-  - `payload.secret` (String): The shared secret.
-  - `payload.agent_id` (String | Optional): Existing ID for re-connection.
-- **Process / Decision Flow**:
-  1. Verify `secret` against `process.env.SHARED_SECRET`. If mismatch → **401 Unauthorized**.
-  2. If `agent_id` is provided in the request:
-     - Check if `agent_id` exists in the `Registry`.
-     - Verify it matches the incoming `cluster_name` or other metadata.
-     - Return the same `agent_id` and existing `agent_token`.
-  3. If NO `agent_id` provided:
-     - Generate new `UUIDv4` as `agent_id`.
-     - Generate a high-entropy string as `agent_token`.
-     - Save to `Registry` with metadata.
-- **Expected Output**:
-  - Success: `{ success: true, agent_id, agent_token }`
-  - Failure: `{ success: false, error: "message" }`
+This document defines the core logic and decision flows for the Chariot Hub and Agent components.
 
 ---
 
-### `registerWithHub()`
-**Location**: `agent/logic.ts`
-**Purpose**: Handles the agent-side "Persistent Join" logic.
+## 🛡️ Identity & Access Management
 
-- **Process / Decision Flow**:
-  1. Load `agent_id` and `agent_token` from local storage (e.g., `agent.config.json`).
-  2. If credentials exist:
-     - Attempt registration with `{ agent_id, secret, metadata }`.
-  3. If NO credentials exist:
-     - Attempt registration with `{ secret, metadata }`.
-  4. On Success (201):
-     - Save returned `agent_id` and `agent_token` to `agent.config.json`.
-  5. On Failure:
-     - Enter retry loop with exponential backoff.
-- **Expected Output**:
-  - Success: `{ success: true, agentId, agentToken }`.
+### `validateRegistration(handshakePayload)`
+**Location**: `hub/src/lib/auth.ts`  
+**Purpose**: Centralized validator for agent identity provisioning and session resumption.
+
+- **Logical Flow**:
+  1. Authorizes the incoming `secret` against `SHARED_SECRET`.
+  2. **Session Resumption**: If an `agent_id` is present, it validates it against the active `Registry`.
+  3. **Identity Provisioning**: For new agents, it generates a unique `agent_id` (UUIDv4) and a high-entropy `agent_token`.
+  4. Persists the provisioned identity in the `Registry` and returns the credentials to the Agent.
 
 ---
 
-## 🛰️ 2. Status Reporting (Auth Required)
+## 🛰️ Telemetry Orchestration
 
-### `pushReportToHub(agentId, agentToken, reportData)`
-**Location**: `agent/reporter.ts`
-**Purpose**: Pushes metrics to Hub with secure authentication.
+### `registerWithHub(hubUrl, secret, existingId?)`
+**Location**: `agent/logic.ts`  
+**Purpose**: Orchestrates the Agent's lifecycle from initial boot to persistent identity.
 
-- **Process**:
-  1. Construct POST to Hub `/api/v1/report`.
-  2. Include `X-Agent-ID` and `X-Agent-Token` headers.
-  3. If Hub returns 401 (Invalid Token) → Re-trigger `registerWithHub()`.
+- **Logical Flow**:
+  1. Loads `AgentConfig` from local filesystem if available.
+  2. Initiates the Hub handshake.
+  3. On success: Persists the Hub-issued `agent_id` and `agent_token` locally to support seamless resumption on restart.
+  4. On failure: Initiates a retry loop with exponential backoff.
+
+### `pushReportToHub(hubUrl, agentId, token, telemetryPayload)`
+**Location**: `agent/reporter.ts`  
+**Purpose**: Securely transmits validated cluster metrics to the central Hub.
+
+- **Logical Flow**:
+  1. Compiles `ClusterReport` containing Agones fleet health and node metrics.
+  2. Dispatches a POST request with `X-Agent-ID` and `X-Agent-Token` authorization headers.
+  3. **Self-Healing**: If the Hub returns a `401 Unauthorized`, it signals the orchestration loop to re-initialize the registration handshake.
+
+---
+
+## 📈 Real-Time Broadcast
+
+### `broadcastAgentUpdate(agentId, payload)`
+**Location**: `hub/src/lib/events.ts`  
+**Purpose**: Dispatches validated telemetry updates to all active UI consumers.
+
+- **Logical Flow**:
+  1. Wraps the telemetry payload in a structured `AgentUpdateEvent`.
+  2. Iterates through all `activeListeners` (SSE controllers) and enqueues the serialized payload for immediate delivery.

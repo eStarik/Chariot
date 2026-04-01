@@ -1,0 +1,34 @@
+# Chariot Deployment: Production Configuration Example
+# ----------------------------------------------------
+
+# This file shows how to set up two clusters:
+# 1. Management Cluster (Central Hub)
+# 2. Spoke Cluster (Agones Agent)
+
+# (1) Hub Configuration
+hub:
+  image:
+    repository: "ghcr.io/fabian/chariot-hub"
+    tag: "prod-v1.0.1"
+  env:
+    sharedSecret: "s3cr3t-handshak3-01" # MUST MATCH AGENT
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  service:
+    type: LoadBalancer
+
+# (2) Agent Configuration (per Spoke cluster)
+agent:
+  image:
+    repository: "ghcr.io/fabian/chariot-agent"
+    tag: "prod-v1.0.1"
+  hub:
+    url: "https://chariot-hub.central-monitoring.example.com"
+    sharedSecret: "s3cr3t-handshak3-01" # MUST MATCH HUB
+  cluster:
+    name: "us-east-agones-01"
+  reportIntervalMs: 2000 # Higher frequency for critical clusters
+  rbac:
+    create: true

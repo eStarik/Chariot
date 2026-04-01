@@ -1,43 +1,61 @@
 import axios from 'axios';
 
+/**
+ * Standard Fleet and Resource usage metrics.
+ * Must align with Hub's ClusterReport interface.
+ */
+export interface ClusterReport {
+  resources: {
+    cpu: { capacity: string; usage: string };
+    memory: { capacity: string; usage: string };
+  };
+  fleets: Array<{
+    name: string;
+    replicas: number;
+    readyReplicas: number;
+    allocatedReplicas: number;
+  }>;
+}
+
 export interface ReportResult {
   success: boolean;
   error?: string;
+  isUnauthorized?: boolean;
 }
 
 /**
- * Pushes the cluster resource and Agones fleet reports to the Chariot Hub.
- * @param hubUrl The base URL of the Chariot Hub
- * @param agentId The persistent agent ID
- * @param agentToken The secure agent token
- * @param data The resource and fleet metadata
+ * Pushes validated cluster telemetry to the Chariot Hub.
+ * Handles authentication headers and structured error recovery.
  */
 export async function pushReportToHub(
   hubUrl: string, 
   agentId: string, 
   agentToken: string, 
-  data: any
+  telemetryPayload: ClusterReport
 ): Promise<ReportResult> {
   try {
-    const response = await axios.post(`${hubUrl}/api/v1/report`, data, {
+    const hubResponse = await axios.post(`${hubUrl}/api/v1/report`, telemetryPayload, {
       headers: {
         'X-Agent-ID': agentId,
         'X-Agent-Token': agentToken
-      }
+      },
+      timeout: 5000 // 5s timeout for reporting
     });
 
-    if (response.status === 200) {
+    if (hubResponse.status === 200) {
       return { success: true };
     }
 
-    return { success: false, error: `Unexpected status code: ${response.status}` };
+    return { success: false, error: `Hub returned unexpected status: ${hubResponse.status}` };
   } catch (error: any) {
     if (error.response) {
+      const isUnauthorized = error.response.status === 401;
       return {
         success: false,
-        error: error.response.data?.error || 'Reporting failed'
+        isUnauthorized,
+        error: error.response.data?.error || 'Telemetry ingestion failed'
       };
     }
-    return { success: false, error: error.message };
+    return { success: false, error: `Network or internal error: ${error.message}` };
   }
 }
