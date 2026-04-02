@@ -89,7 +89,7 @@ jobs:
             password: ${{ secrets.GITHUB_TOKEN }}
 
         - name: Build and Push Hub Container
-          uses: docker/build-push-action@v6
+          uses: docker/build-push-action@v7
           with:
             context: ./hub
             push: true
@@ -98,7 +98,7 @@ jobs:
               ghcr.io/${{ steps.versioning.outputs.REPO_LOWER }}-hub:${{ steps.versioning.outputs.VERSION }}
 
         - name: Build and Push Agent Container
-          uses: docker/build-push-action@v6
+          uses: docker/build-push-action@v7
           with:
             context: ./agent
             push: true
