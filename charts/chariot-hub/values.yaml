@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  repository: chariot-hub
+  repository: ghcr.io/fabian/chariot-hub
   pullPolicy: IfNotPresent
   tag: "latest"
 
