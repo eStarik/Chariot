@@ -1,10 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { clearRegistry } from '../src/lib/registry';
 import { subscribeToEvents, broadcastAgentUpdate } from '../src/lib/events';
 
 describe('Hub Event Broadcasting (SSE)', () => {
   beforeEach(() => {
-    clearRegistry();
     vi.resetAllMocks();
   });
 

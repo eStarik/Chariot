@@ -9,7 +9,7 @@ const nextConfig = {
     root: path.resolve(__dirname, '..'),
   },
   experimental: {
-    instrumentationHook: true,
+    // Instrumentation is now default/refined in latest Next.js versions
   },
 };
 
