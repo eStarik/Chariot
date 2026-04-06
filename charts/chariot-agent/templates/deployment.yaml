@@ -31,7 +31,9 @@ spec:
               key: sharedSecret
         - name: CLUSTER_NAME
           value: {{ .Values.cluster.name | quote }}
-        - name: REPORT_INTERVAL_MS
+        - name: NAMESPACES
+          value: {{ .Values.cluster.namespaces | quote }}
+        - name: REPORT_INTERVAL
           value: {{ .Values.reportIntervalMs | quote }}
         resources:
           {{- toYaml .Values.resources | nindent 10 }}

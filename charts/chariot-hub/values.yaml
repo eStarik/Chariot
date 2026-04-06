@@ -11,8 +11,20 @@ service:
   targetPort: 3000
 
 env:
-  sharedSecret: "CHANGE_ME"
+  sharedSecret: "chariot-test-secret" # Mandatory for agent registration handshake
   # existingSecret: "chariot-secrets"
+  databaseUrl: "" # Manual override if postgresql.enabled is false
+
+postgresql:
+  enabled: true
+  auth:
+    database: chariot
+    username: postgres
+    password: mysecretpassword
+  primary:
+    persistence:
+      enabled: true
+      size: 8Gi
 
 resources:
   limits:

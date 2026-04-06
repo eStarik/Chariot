@@ -11,10 +11,11 @@ hub:
 
 cluster:
   name: "agones-cluster-01"
+  namespaces: "default" # monitors these namespaces (comma-separated)
   # Optional: use a dedicated node selector for Agones clusters
-  nodeSelector: {}
+  # nodeSelector: {}
 
-reportIntervalMs: 5000
+reportIntervalMs: 30000 # telemetry heartbeat frequency in ms
 
 resources:
   limits:

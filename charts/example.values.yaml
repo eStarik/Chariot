@@ -1,34 +1,56 @@
-# Chariot Deployment: Production Configuration Example
-# ----------------------------------------------------
+# Chariot Agones Management Suite - Production Deployment Example
+# This example illustrates a unified configuration for both Hub and clusters.
 
-# This file shows how to set up two clusters:
-# 1. Management Cluster (Central Hub)
-# 2. Spoke Cluster (Agones Agent)
-
-# (1) Hub Configuration
+# --- Chariot Hub Settings ---
+# Deploy to a central monitoring namespace (e.g., 'monitoring')
 hub:
+  replicaCount: 1
   image:
-    repository: "ghcr.io/fabian/chariot-hub"
-    tag: "prod-v1.0.1"
-  env:
-    sharedSecret: "s3cr3t-handshak3-01" # MUST MATCH AGENT
-  resources:
-    limits:
-      cpu: 500m
-      memory: 1Gi
-  service:
-    type: LoadBalancer
+    repository: ghcr.io/fabian/chariot-hub
+    tag: "latest" # or pin to a specific version (e.g., v3.0.0-phalanx)
 
-# (2) Agent Configuration (per Spoke cluster)
+  env:
+    # This must match the SHARED_SECRET on all connected agents.
+    sharedSecret: "chariot-secure-id-A9X-2026"
+    
+  postgresql:
+    enabled: true # Recommended for persistent formation storage and stateless architecture
+    persistence:
+      size: 10Gi
+    auth:
+      database: chariot
+      username: postgres
+      password: "secure-db-password-change-me"
+
+  service:
+    type: LoadBalancer # Expose to reach from external Agones clusters
+    port: 80
+
+# --- Chariot Agent Settings ---
+# Deploy one agent per target Agones cluster
 agent:
   image:
-    repository: "ghcr.io/fabian/chariot-agent"
-    tag: "prod-v1.0.1"
+    repository: ghcr.io/fabian/chariot-agent
+    tag: "latest"
+
   hub:
-    url: "https://chariot-hub.central-monitoring.example.com"
-    sharedSecret: "s3cr3t-handshak3-01" # MUST MATCH HUB
+    # URL to reach the Chariot Hub (LoadBalancer IP or DNS)
+    url: "http://hub.yourdomain.com"
+    sharedSecret: "chariot-secure-id-A9X-2026"
+
   cluster:
-    name: "us-east-agones-01"
-  reportIntervalMs: 2000 # Higher frequency for critical clusters
+    name: "rome-cluster-eu-west-01"
+    namespaces: "default,game-servers" # Monitor these Agones namespaces
+
+  reportIntervalMs: 30000 # Standard 30s heartbeat
+  
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
   rbac:
-    create: true
+    create: true # Necessary for reading Agones Fleet/GameServer resources

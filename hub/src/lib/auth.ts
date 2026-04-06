@@ -36,7 +36,7 @@ export async function validateRegistration(payload: RegistrationPayload): Promis
 
   // Handle existing agent re-connection
   if (agent_id) {
-    const existingAgent = getAgent(agent_id);
+    const existingAgent = await getAgent(agent_id);
     if (existingAgent) {
       return {
         success: true,
@@ -50,7 +50,7 @@ export async function validateRegistration(payload: RegistrationPayload): Promis
   const generatedId = uuidv4();
   const generatedToken = crypto.randomBytes(32).toString('hex');
 
-  registerAgent(generatedId, metadata || {}, generatedToken);
+  await registerAgent(generatedId, metadata || {}, generatedToken);
 
   return {
     success: true,

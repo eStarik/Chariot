@@ -8,6 +8,9 @@ const nextConfig = {
   turbopack: {
     root: path.resolve(__dirname, '..'),
   },
+  experimental: {
+    instrumentationHook: true,
+  },
 };
 
 module.exports = nextConfig;
