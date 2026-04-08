@@ -1,8 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getClusterCapacity, getAgonesFleetSummary, getAgonesGameServerSummary } from '../monitor';
 
-// Mock for @kubernetes/client-node
-const mockListClusterCustomObject = vi.fn();
+const { mockCoreApi, mockCustomApi, mockListClusterCustomObject } = vi.hoisted(() => {
+  const mockListCluster = vi.fn().mockResolvedValue({
+    items: [
+      { metadata: { namespace: 'default', name: 'fleet-1' }, status: { readyReplicas: 5, allocatedReplicas: 2 } }
+    ]
+  });
+  const coreApi = {
+    listNode: vi.fn().mockResolvedValue({ items: [{ status: { capacity: { cpu: '4', memory: '16Gi' } } }] }),
+    listPodForAllNamespaces: vi.fn().mockResolvedValue({ items: [{ status: { phase: 'Running' }, spec: { containers: [{ resources: { requests: { cpu: '1', memory: '2Gi' } } }] } }] }),
+    readNamespace: vi.fn().mockResolvedValue({ metadata: { uid: 'test-cluster-uid' } })
+  };
+  return { mockCoreApi: coreApi, mockCustomApi: { listClusterCustomObject: mockListCluster }, mockListClusterCustomObject: mockListCluster };
+});
 
 vi.mock('@kubernetes/client-node', () => {
   return {

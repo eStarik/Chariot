@@ -2,10 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import axios from 'axios';
 import { registerWithHub, loadPersistentConfig } from '../logic';
 
-// Create a high-fidelity mock for @kubernetes/client-node
-const mockReadNamespacedSecret = vi.fn();
-const mockCreateNamespacedSecret = vi.fn();
-const mockReplaceNamespacedSecret = vi.fn();
+const { mockReadNamespacedSecret, mockCreateNamespacedSecret, mockReplaceNamespacedSecret } = vi.hoisted(() => ({
+  mockReadNamespacedSecret: vi.fn(),
+  mockCreateNamespacedSecret: vi.fn(),
+  mockReplaceNamespacedSecret: vi.fn(),
+}));
 
 vi.mock('@kubernetes/client-node', () => {
   return {
