@@ -32,7 +32,7 @@ export interface RegistrationResult {
  */
 export async function loadPersistentConfig(): Promise<{ agent_id: string; agent_token: string } | null> {
   try {
-    const response = await coreApi.readNamespacedSecret({ 
+    const response = await coreApi.readNamespacedSecret({
       name: IDENTITY_SECRET_NAME, 
       namespace: DEFAULT_NAMESPACE 
     });
@@ -74,18 +74,24 @@ async function savePersistentConfig(agentId: string, agentToken: string): Promis
   } catch (err: any) {
     if (err.response?.statusCode === 404) {
       // Create if missing
-      await coreApi.createNamespacedSecret({
-        namespace: DEFAULT_NAMESPACE,
-        body: {
-          apiVersion: 'v1',
-          kind: 'Secret',
-          metadata: { name: IDENTITY_SECRET_NAME },
-          data: secretData,
-          type: 'Opaque'
-        }
-      });
+      try {
+        await coreApi.createNamespacedSecret({
+          namespace: DEFAULT_NAMESPACE,
+          body: {
+            apiVersion: 'v1',
+            kind: 'Secret',
+            metadata: { name: IDENTITY_SECRET_NAME },
+            data: secretData,
+            type: 'Opaque'
+          }
+        });
+      } catch (createErr: any) {
+        console.error('[Auth] Failed to create identity secret:', createErr.response?.body?.message || createErr.message);
+        throw createErr;
+      }
     } else {
-      console.error('[Auth] Failed to persist identity secret:', err.message);
+      console.error('[Auth] Failed to update identity secret:', err.response?.body?.message || err.message);
+      throw err;
     }
   }
 }
@@ -115,9 +121,15 @@ export async function registerWithHub(hubUrl: string, secret: string, existingAg
       await savePersistentConfig(agent_id, agent_token);
       return { success: true, agentId: agent_id, agentToken: agent_token };
     } else {
+      console.error('[Auth] registration handshake failed with data:', JSON.stringify(hubResponse.data));
       return { success: false, error: hubResponse.data.error || 'Hub registration handshake failed' };
     }
-  } catch (error) {
+  } catch (error: any) {
+    if (error.response) {
+      console.error('[Auth] registration handshake failed with status:', error.response.status, 'data:', JSON.stringify(error.response.data));
+    } else {
+      console.error('[Auth] registration handshake failed with error:', error.message);
+    }
     return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
 }

@@ -28,6 +28,7 @@ export async function POST(req: NextRequest) {
     // Return the provisioned identifiers required for subsequent reporting
     return NextResponse.json(
       { 
+        success: true,
         agent_id: handshakeResult.agent_id,
         agent_token: handshakeResult.agent_token,
         status: 'registered'
