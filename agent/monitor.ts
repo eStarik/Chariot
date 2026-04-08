@@ -1,10 +1,127 @@
 import * as k8s from '@kubernetes/client-node';
+import YAML from 'yaml';
 
 const kubeConfig = new k8s.KubeConfig();
 kubeConfig.loadFromDefault();
 
 const coreApi = kubeConfig.makeApiClient(k8s.CoreV1Api);
 const customObjectsApi = kubeConfig.makeApiClient(k8s.CustomObjectsApi);
+
+/**
+ * Applies an Agones configuration (GameServer or Fleet) to the cluster.
+ * Uses the CustomObjectsApi to create the resource in the target namespace.
+ */
+export async function applyAgonesConfiguration(yamlStr: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const parsed = YAML.parse(yamlStr);
+    const group = 'agones.dev';
+    const version = 'v1';
+    const kind = parsed.kind;
+    const plural = kind.toLowerCase() + 's';
+    const namespace = parsed.metadata?.namespace || 'default';
+
+    console.info(`[Monitor] Applying ${kind} "${parsed.metadata?.name}" to namespace "${namespace}"...`);
+
+    try {
+      // Attempt to create the resource
+      await customObjectsApi.createNamespacedCustomObject({
+        group,
+        version,
+        namespace,
+        plural,
+        body: parsed
+      });
+
+      // --- AUTOMATED EXPOSURE ---
+      if (kind === 'GameServer') {
+        await autoExposeGameServer(parsed);
+      }
+      
+      return { success: true };
+    } catch (createError: any) {
+      // If it already exists, attempt to replace/patch it
+      if (createError.response?.status === 409) {
+        console.warn(`[Monitor] ${kind} already exists, attempting update...`);
+        await customObjectsApi.replaceNamespacedCustomObject({
+          group,
+          version,
+          namespace,
+          plural,
+          name: parsed.metadata.name,
+          body: parsed
+        });
+        return { success: true };
+      }
+      throw createError;
+    }
+  } catch (error: any) {
+    const msg = error.response?.body?.message || error.message;
+    console.error('[Monitor] Deployment failed:', msg);
+    return { success: false, error: msg };
+  }
+}
+
+/**
+ * Automatically creates a LoadBalancer service for a GameServer to expose it.
+ */
+async function autoExposeGameServer(gs: any) {
+  const name = gs.metadata.name;
+  const ns = gs.metadata.namespace || 'default';
+  
+  // Find the primary port from GameServer spec
+  const containerPort = gs.spec.ports?.[0]?.containerPort || gs.spec.template.spec.containers[0].ports?.[0]?.containerPort || 8080;
+  
+  console.info(`[Monitor] Auto-exposing GameServer "${name}" via LoadBalancer...`);
+  
+  const svcName = `${name}-exposure`;
+  const serviceManifest = {
+    apiVersion: 'v1',
+    kind: 'Service',
+    metadata: {
+      name: svcName,
+      namespace: ns,
+      labels: {
+        'chariot.dev/managed': 'true',
+        'agones.dev/gameserver': name
+      },
+      ownerReferences: [
+        {
+          apiVersion: gs.apiVersion,
+          kind: gs.kind,
+          name: name,
+          uid: gs.metadata?.uid,
+          controller: true,
+          blockOwnerDeletion: true
+        }
+      ]
+    },
+    spec: {
+      type: 'LoadBalancer',
+      selector: {
+        'agones.dev/gameserver': name
+      },
+      ports: [
+        {
+          name: 'default',
+          port: containerPort,
+          targetPort: containerPort,
+          protocol: 'UDP'
+        }
+      ]
+    }
+  };
+
+  try {
+    await coreApi.createNamespacedService({ namespace: ns, body: serviceManifest });
+    console.info(`[Monitor] Exposure service created: ${svcName}`);
+  } catch (err: any) {
+    if (err.response?.status === 409) {
+      console.warn(`[Monitor] Exposure service already exists for ${name}`);
+    } else {
+      console.error(`[Monitor] Failed to auto-expose ${name}:`, err.message);
+    }
+  }
+}
 
 export interface ClusterCapacity {
   cpuTotal: number;
@@ -14,10 +131,10 @@ export interface ClusterCapacity {
 }
 
 export interface FleetSummary {
-  fleetName: string;
-  namespace: string;
-  ready: number;
-  allocated: number;
+  name: string;
+  replicas: number;
+  readyReplicas: number;
+  allocatedReplicas: number;
 }
 
 /**
@@ -38,35 +155,39 @@ export async function getClusterFingerprint(): Promise<string> {
  * Scans all nodes and running pods across all namespaces.
  */
 export async function getClusterCapacity(): Promise<ClusterCapacity> {
-  // Fetch infrastructure state
-  const nodes = await coreApi.listNode();
-  const pods = await coreApi.listPodForAllNamespaces();
-
   let cpuTotal = 0;
   let ramTotal = 0; // Unit: GiB
   let cpuUsed = 0;
   let ramUsed = 0; // Unit: GiB
 
-  // Accumulate node-level capacity
-  for (const node of nodes.items) {
-    const cpuValue = node.status?.capacity?.cpu || '0';
-    const memValue = node.status?.capacity?.memory || '0Ki';
-    
-    cpuTotal += parseK8sCpu(cpuValue);
-    ramTotal += parseK8sMemory(memValue);
+  try {
+    const nodes = await coreApi.listNode();
+    for (const node of nodes.items) {
+      const cpuValue = node.status?.capacity?.cpu || '0';
+      const memValue = node.status?.capacity?.memory || '0Ki';
+      
+      cpuTotal += parseK8sCpu(cpuValue);
+      ramTotal += parseK8sMemory(memValue);
+    }
+  } catch (err) {
+    console.error('[Monitor] Failed to list nodes (RBAC?):', err instanceof Error ? err.message : err);
   }
 
-  // Accumulate pod-level resource requests (as a proxy for usage)
-  for (const pod of pods.items) {
-    if (pod.status?.phase === 'Running') {
-      for (const container of pod.spec?.containers || []) {
-        const cpuReq = container.resources?.requests?.cpu || '0';
-        const memReq = container.resources?.requests?.memory || '0Ki';
-        
-        cpuUsed += parseK8sCpu(cpuReq);
-        ramUsed += parseK8sMemory(memReq);
+  try {
+    const pods = await coreApi.listPodForAllNamespaces();
+    for (const pod of pods.items) {
+      if (pod.status?.phase === 'Running') {
+        for (const container of pod.spec?.containers || []) {
+          const cpuReq = container.resources?.requests?.cpu || '0';
+          const memReq = container.resources?.requests?.memory || '0Ki';
+          
+          cpuUsed += parseK8sCpu(cpuReq);
+          ramUsed += parseK8sMemory(memReq);
+        }
       }
     }
+  } catch (err) {
+    console.error('[Monitor] Failed to list pods (RBAC?):', err instanceof Error ? err.message : err);
   }
 
   return {
@@ -95,10 +216,10 @@ export async function getAgonesFleetSummary(targetNamespaces: string[]): Promise
       const ns = item.metadata.namespace;
       if (targetNamespaces.includes(ns)) {
         summarizedFleets.push({
-          fleetName: item.metadata.name,
-          namespace: ns,
-          ready: item.status?.readyReplicas || 0,
-          allocated: item.status?.allocatedReplicas || 0
+          name: item.metadata.name,
+          replicas: item.spec?.replicas || 0,
+          readyReplicas: item.status?.readyReplicas || 0,
+          allocatedReplicas: item.status?.allocatedReplicas || 0
         });
       }
     }

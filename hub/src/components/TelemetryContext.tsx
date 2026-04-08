@@ -25,6 +25,12 @@ export interface AgentRecord {
   lastReportTimestamp?: number;
   resources?: ClusterResources;
   fleets?: FleetStatus[];
+  servers?: Array<{
+    name: string;
+    state: string;
+    address: string;
+    port: number;
+  }>;
 }
 
 interface TelemetryContextType {

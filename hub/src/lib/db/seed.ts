@@ -37,8 +37,8 @@ spec:
         image: "cm2network/csgo:latest"
         resources:
           requests:
-            memory: "2Gi"
-            cpu: "2"`
+            memory: "0.2Gi"
+            cpu: "0.1"`
       };
       
       const mc = {
@@ -69,8 +69,8 @@ spec:
         image: "itzg/minecraft-bedrock-server"
         resources:
           requests:
-            memory: "4Gi"
-            cpu: "1"`
+            memory: "0.4Gi"
+            cpu: "0.1"`
       };
 
       await db.insert(formations).values([cs2, mc]);

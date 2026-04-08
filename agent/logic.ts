@@ -72,8 +72,27 @@ async function savePersistentConfig(agentId: string, agentToken: string): Promis
       }
     });
   } catch (err: any) {
-    if (err.response?.statusCode === 404) {
-      // Create if missing
+    // Diagnostic logging for persistence troubleshooting
+    console.debug('[Auth] Secret update failed, analyzing error object...');
+    
+    let statusCode = err.response?.statusCode || err.statusCode;
+    let reason = err.body?.reason || err.reason;
+    let message = err.body?.message || err.message || '';
+
+    // Handle case where body is a JSON string or contains the error info
+    const bodyStr = typeof err.body === 'string' ? err.body : JSON.stringify(err.body || {});
+    
+    if (!statusCode) {
+      if (bodyStr.includes('"code":404') || bodyStr.includes('NotFound') || message.includes('404') || message.includes('not found')) {
+        statusCode = 404;
+        reason = 'NotFound';
+      }
+    }
+
+    const isNotFound = statusCode === 404 || reason === 'NotFound' || message.includes('not found');
+
+    if (isNotFound) {
+      console.info(`[Auth] Identity secret "${IDENTITY_SECRET_NAME}" not found. Creating new secret...`);
       try {
         await coreApi.createNamespacedSecret({
           namespace: DEFAULT_NAMESPACE,
@@ -85,12 +104,17 @@ async function savePersistentConfig(agentId: string, agentToken: string): Promis
             type: 'Opaque'
           }
         });
+        console.info('[Auth] Identity secret created successfully.');
       } catch (createErr: any) {
         console.error('[Auth] Failed to create identity secret:', createErr.response?.body?.message || createErr.message);
         throw createErr;
       }
     } else {
-      console.error('[Auth] Failed to update identity secret:', err.response?.body?.message || err.message);
+      console.error('[Auth] Failed to update identity secret. Full Error Details:');
+      console.error(`- Status Code: ${statusCode}`);
+      console.error(`- Reason: ${reason}`);
+      console.error(`- Message: ${message}`);
+      console.error(`- Body Snippet: ${bodyStr.substring(0, 200)}`);
       throw err;
     }
   }

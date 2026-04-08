@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { registerWithHub, loadPersistentConfig } from './logic';
-import { getClusterCapacity, getAgonesFleetSummary, getAgonesGameServerSummary } from './monitor';
+import { getClusterCapacity, getAgonesFleetSummary, getAgonesGameServerSummary, applyAgonesConfiguration } from './monitor';
 import { pushReportToHub, ClusterReport } from './reporter';
 
 const HUB_URL = process.env.HUB_URL || 'http://localhost:3000';
@@ -40,34 +40,44 @@ async function startAgent() {
   setInterval(async () => {
     try {
       console.debug(`[Telemetry] Gathering cluster metrics...`);
-      
       const resources = await getClusterCapacity();
-      const fleets = await getAgonesFleetSummary(NAMESPACES);
-      const servers = await getAgonesGameServerSummary(NAMESPACES);
-
+      const fleets = await getAgonesFleetSummary(['default']);
+      const servers = await getAgonesGameServerSummary(['default']);
+      
       const telemetryReport: ClusterReport = {
         resources: {
-          cpu: { capacity: String(resources.cpuTotal), usage: String(resources.cpuUsed) },
-          memory: { capacity: String(resources.ramTotal), usage: String(resources.ramUsed) }
+          cpu: { 
+            capacity: resources.cpuTotal.toString(), 
+            usage: resources.cpuUsed.toString() 
+          },
+          memory: { 
+            capacity: `${resources.ramTotal.toFixed(2)}Gi`, 
+            usage: `${resources.ramUsed.toFixed(2)}Gi` 
+          }
         },
-        fleets: fleets.map(f => ({
-          name: f.fleetName,
-          replicas: f.ready + f.allocated, // Total replicas for simplify
-          readyReplicas: f.ready,
-          allocatedReplicas: f.allocated
-        })),
-        servers: servers.map((s: any) => ({
-          name: s.name,
-          state: s.state,
-          address: s.address,
-          port: s.port
-        }))
+        fleets,
+        servers
       };
 
+      console.info(`[Telemetry] Preparing report for Hub...`);
       const ingestionResult = await pushReportToHub(HUB_URL, agentId!, agentToken!, telemetryReport);
+      console.info(`[Telemetry] Hub interaction completed. Success: ${ingestionResult.success}`);
 
       if (ingestionResult.success) {
-        console.debug(`[Telemetry] Telemetry successfully ingested by Hub.`);
+        if (ingestionResult.commands && ingestionResult.commands.length > 0) {
+          console.info(`[Commands] Received ${ingestionResult.commands.length} instructions from Hub:`, JSON.stringify(ingestionResult.commands, null, 2));
+          for (const cmd of ingestionResult.commands) {
+            if (cmd.type === 'DEPLOY_FORMATION') {
+              console.info(`[Commands] Executing deployment: ${cmd.payload.name}`);
+              const result = await applyAgonesConfiguration(cmd.payload.yaml);
+              if (result.success) {
+                console.info(`[Commands] Deployment successful: ${cmd.payload.name}`);
+              } else {
+                console.error(`[Commands] Deployment failed: ${result.error}`);
+              }
+            }
+          }
+        }
       } else {
         console.error(`[Telemetry] ingestion failed: ${ingestionResult.error}`);
         

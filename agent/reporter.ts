@@ -27,6 +27,7 @@ export interface ReportResult {
   success: boolean;
   error?: string;
   isUnauthorized?: boolean;
+  commands?: any[];
 }
 
 /**
@@ -39,6 +40,7 @@ export async function pushReportToHub(
   agentToken: string, 
   telemetryPayload: ClusterReport
 ): Promise<ReportResult> {
+  console.info(`[Reporter] Pushing telemetry to Hub: ${hubUrl}/api/v1/report`);
   try {
     const hubResponse = await axios.post(`${hubUrl}/api/v1/report`, telemetryPayload, {
       headers: {
@@ -49,7 +51,10 @@ export async function pushReportToHub(
     });
 
     if (hubResponse.status === 200) {
-      return { success: true };
+      return { 
+        success: true, 
+        commands: hubResponse.data?.commands || [] 
+      };
     }
 
     return { success: false, error: `Hub returned unexpected status: ${hubResponse.status}` };
