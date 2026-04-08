@@ -16,9 +16,11 @@ vi.mock('@kubernetes/client-node', () => {
         readNamespacedSecret: mockReadNamespacedSecret,
         createNamespacedSecret: mockCreateNamespacedSecret,
         replaceNamespacedSecret: mockReplaceNamespacedSecret,
+        readNamespace: vi.fn().mockResolvedValue({ metadata: { uid: 'mock-cluster-id' } }),
       }));
     },
     CoreV1Api: class {},
+    CustomObjectsApi: class {},
   };
 });
 
@@ -64,15 +66,14 @@ describe('Agent Identity Persistence (Kubernetes Secrets)', () => {
 
     expect(result.success).toBe(true);
     expect(result.agentId).toBe(newId);
-    expect(mockReplaceNamespacedSecret).toHaveBeenCalledWith(
-      'chariot-agent-identity',
-      expect.any(String),
-      expect.objectContaining({
+    expect(mockReplaceNamespacedSecret).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'chariot-agent-identity',
+      body: expect.objectContaining({
         data: {
           agent_id: Buffer.from(newId).toString('base64'),
           agent_token: Buffer.from(newToken).toString('base64')
         }
       })
-    );
+    }));
   });
 });
