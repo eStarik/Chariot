@@ -5,8 +5,6 @@ import { getClusterCapacity, getAgonesFleetSummary, getAgonesGameServerSummary }
 const mockListClusterCustomObject = vi.fn();
 
 vi.mock('@kubernetes/client-node', () => {
-  };
-
   return {
     KubeConfig: class {
       loadFromDefault = vi.fn();
