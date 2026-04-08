@@ -29,4 +29,4 @@ USER nextjs
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
-ENTRYPOINT ["node", "server.js"]
+ENTRYPOINT ["node", "hub/server.js"]
