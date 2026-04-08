@@ -6,7 +6,7 @@
 hub:
   replicaCount: 1
   image:
-    repository: ghcr.io/fabian/chariot-hub
+    repository: ghcr.io/estarik/chariot-hub
     tag: "latest" # or pin to a specific version (e.g., v3.0.0-phalanx)
 
   env:
@@ -30,7 +30,7 @@ hub:
 # Deploy one agent per target Agones cluster
 agent:
   image:
-    repository: ghcr.io/fabian/chariot-agent
+    repository: ghcr.io/estarik/chariot-agent
     tag: "latest"
 
   hub:

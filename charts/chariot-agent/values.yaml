@@ -1,13 +1,13 @@
 replicaCount: 1
 
 image:
-  repository: ghcr.io/fabian/chariot-agent
+  repository: ghcr.io/estarik/chariot-agent
   pullPolicy: IfNotPresent
   tag: "latest"
 
 hub:
-  url: "http://chariot-hub.monitoring.svc.cluster.local"
-  sharedSecret: "CHANGE_ME"
+  url: "http://chariot-hub.default.svc.cluster.local"
+  sharedSecret: "chariot-test-secret"
 
 cluster:
   name: "agones-cluster-01"
