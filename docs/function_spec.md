@@ -4,7 +4,7 @@ This document defines the core logic and decision flows for the Chariot Hub and 
 
 ---
 
-## 🛡️ Identity & Access Management
+## Identity & Access Management
 
 ### `validateRegistration(handshakePayload)`
 **Location**: `hub/src/lib/auth.ts`  
@@ -18,7 +18,7 @@ This document defines the core logic and decision flows for the Chariot Hub and 
 
 ---
 
-## 🛰️ Telemetry Orchestration
+## Telemetry Orchestration
 
 ### `registerWithHub(hubUrl, secret, existingId?)`
 **Location**: `agent/logic.ts`  
@@ -41,7 +41,7 @@ This document defines the core logic and decision flows for the Chariot Hub and 
 
 ---
 
-## 📈 Real-Time Broadcast
+## Real-Time Broadcast
 
 ### `broadcastAgentUpdate(agentId, payload)`
 **Location**: `hub/src/lib/events.ts`  

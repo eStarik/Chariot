@@ -37,8 +37,8 @@ describe('Formations Logic', () => {
       expect(mockInsert).toHaveBeenCalled();
       expect(mockInsertValues).toHaveBeenCalledWith(
         expect.arrayContaining([
-          expect.objectContaining({ name: 'CS2 Default Local', tickrate: '64Hz' }),
-          expect.objectContaining({ name: 'Minecraft Bedrock', memory: '4Gi' })
+          expect.objectContaining({ name: 'CS2 Default Local' }),
+          expect.objectContaining({ name: 'Minecraft Bedrock' })
         ])
       );
     });

@@ -21,6 +21,19 @@ export interface FleetSummary {
 }
 
 /**
+ * Retrieves the unique UID of the kube-system namespace as a cluster fingerprint.
+ */
+export async function getClusterFingerprint(): Promise<string> {
+  try {
+    const ns = await coreApi.readNamespace({ name: 'kube-system' });
+    return ns.metadata?.uid || 'unknown-cluster-uid';
+  } catch (error) {
+    console.error('[Monitor] Failed to retrieve cluster fingerprint:', error instanceof Error ? error.message : error);
+    return 'unknown-cluster-uid';
+  }
+}
+
+/**
  * Aggregates cluster-wide resource capacity and current request-based usage.
  * Scans all nodes and running pods across all namespaces.
  */
@@ -94,6 +107,44 @@ export async function getAgonesFleetSummary(targetNamespaces: string[]): Promise
   }
 
   return summarizedFleets;
+}
+
+/**
+ * Discovers and summarizes individual Agones GameServer instances within specified namespaces.
+ */
+export async function getAgonesGameServerSummary(targetNamespaces: string[]): Promise<ServerStatus[]> {
+  const servers: ServerStatus[] = [];
+  
+  try {
+    const response = await customObjectsApi.listClusterCustomObject({
+      group: 'agones.dev',
+      version: 'v1',
+      plural: 'gameservers'
+    }) as { items: any[] };
+    
+    for (const item of response.items) {
+      const ns = item.metadata.namespace;
+      if (targetNamespaces.includes(ns)) {
+        servers.push({
+          name: item.metadata.name,
+          state: item.status?.state || 'Unknown',
+          address: item.status?.address || 'N/A',
+          port: item.status?.ports?.[0]?.port || 0
+        });
+      }
+    }
+  } catch (error) {
+    console.error('[Monitor] Failed to retrieve Agones GameServers:', error instanceof Error ? error.message : error);
+  }
+
+  return servers;
+}
+
+export interface ServerStatus {
+  name: string;
+  state: string;
+  address: string;
+  port: number;
 }
 
 /**

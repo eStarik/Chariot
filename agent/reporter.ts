@@ -15,6 +15,12 @@ export interface ClusterReport {
     readyReplicas: number;
     allocatedReplicas: number;
   }>;
+  servers?: Array<{
+    name: string;
+    state: string;
+    address: string;
+    port: number;
+  }>;
 }
 
 export interface ReportResult {

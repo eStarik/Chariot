@@ -20,9 +20,12 @@ export const formations = pgTable('formations', {
 export const agents = pgTable('agents', {
   id: text('id').primaryKey(), // matches agent_id
   token: text('token').notNull(), // matches agent_token
+  fingerprint: text('fingerprint').unique(), // immutable cluster signature
+  status: text('status').default('connected'), // 'connected' | 'disconnected'
   metadata: text('metadata').notNull(), // stringified JSON
   resources: text('resources'), // stringified JSON
   fleets: text('fleets'), // stringified JSON
+  servers: text('servers'), // stringified JSON (lists individual GameServers)
   last_report_at: timestamp('last_report_at'),
   created_at: timestamp('created_at').defaultNow(),
 });

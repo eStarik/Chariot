@@ -1,0 +1,24 @@
+# --- Local Test Overrides for Chariot Agent ---
+# Usage: helm install chariot-agent ./charts/chariot-agent -f ./charts/chariot-agent/values.yaml -f ./charts/chariot-agent/values.local.yaml
+
+image:
+  pullPolicy: IfNotPresent # Leverage manual tarball imports
+  tag: "dev"
+
+hub:
+  url: "http://chariot-hub" # Internal service discovery coordination (Port 80)
+  sharedSecret: "chariot-test-secret"
+
+cluster:
+  name: "local-dev-cluster"
+  namespaces: "default,agones-system"
+
+reportIntervalMs: 10000 # Faster heartbeat for local testing feedback
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi

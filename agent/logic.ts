@@ -1,8 +1,23 @@
 import axios from 'axios';
-import * as fs from 'fs/promises';
-import * as path from 'path';
+import { getClusterFingerprint } from './monitor';
+import * as k8s from '@kubernetes/client-node';
 
-const PERSISTENT_CONFIG_PATH = path.join(process.cwd(), 'agent.config.json');
+const kubeConfig = new k8s.KubeConfig();
+kubeConfig.loadFromDefault();
+const coreApi = kubeConfig.makeApiClient(k8s.CoreV1Api);
+
+const IDENTITY_SECRET_NAME = 'chariot-agent-identity';
+const DEFAULT_NAMESPACE = process.env.POD_NAMESPACE || 'default';
+
+export interface HandshakePayload {
+  secret: string;
+  agent_id?: string;
+  fingerprint?: string;
+  metadata: {
+    clusterName: string;
+    [key: string]: any;
+  };
+}
 
 export interface RegistrationResult {
   success: boolean;
@@ -11,28 +26,79 @@ export interface RegistrationResult {
   error?: string;
 }
 
-export interface AgentConfig {
-  agent_id: string;
-  agent_token: string;
-}
-
-export interface HandshakePayload {
-  secret: string;
-  agent_id?: string;
-  metadata: {
-    clusterName: string;
-    [key: string]: any;
-  };
+/**
+ * Attempts to load persistent identity (agent_id and token) from a Kubernetes Secret.
+ * This foundationally ensures persistence across pod restarts without local volumes.
+ */
+export async function loadPersistentConfig(): Promise<{ agent_id: string; agent_token: string } | null> {
+  try {
+    const response = await coreApi.readNamespacedSecret({ 
+      name: IDENTITY_SECRET_NAME, 
+      namespace: DEFAULT_NAMESPACE 
+    });
+    
+    if (!response.data || !response.data.agent_id || !response.data.agent_token) return null;
+    
+    return {
+      agent_id: Buffer.from(response.data.agent_id, 'base64').toString(),
+      agent_token: Buffer.from(response.data.agent_token, 'base64').toString()
+    };
+  } catch (error) {
+    return null;
+  }
 }
 
 /**
- * Initiates the identity handshake with the central Chariot Hub.
- * If an existingAgentId is provided, the Hub will attempt to resume the session.
+ * Persists registration identity into a Kubernetes Secret.
+ * Synchronizes the monitor's identity with the cluster control plane.
+ */
+async function savePersistentConfig(agentId: string, agentToken: string): Promise<void> {
+  const secretData = {
+    agent_id: Buffer.from(agentId).toString('base64'),
+    agent_token: Buffer.from(agentToken).toString('base64')
+  };
+
+  try {
+    // Attempt update first
+    await coreApi.replaceNamespacedSecret({
+      name: IDENTITY_SECRET_NAME,
+      namespace: DEFAULT_NAMESPACE,
+      body: {
+        apiVersion: 'v1',
+        kind: 'Secret',
+        metadata: { name: IDENTITY_SECRET_NAME },
+        data: secretData,
+        type: 'Opaque'
+      }
+    });
+  } catch (err: any) {
+    if (err.response?.statusCode === 404) {
+      // Create if missing
+      await coreApi.createNamespacedSecret({
+        namespace: DEFAULT_NAMESPACE,
+        body: {
+          apiVersion: 'v1',
+          kind: 'Secret',
+          metadata: { name: IDENTITY_SECRET_NAME },
+          data: secretData,
+          type: 'Opaque'
+        }
+      });
+    } else {
+      console.error('[Auth] Failed to persist identity secret:', err.message);
+    }
+  }
+}
+
+/**
+ * Orchestrates the registration handshake with the Hub coordinator.
  */
 export async function registerWithHub(hubUrl: string, secret: string, existingAgentId?: string): Promise<RegistrationResult> {
   try {
+    const fingerprint = await getClusterFingerprint();
     const handshakePayload: HandshakePayload = {
       secret,
+      fingerprint,
       metadata: {
         clusterName: process.env.CLUSTER_NAME || 'unknown-cluster'
       }
@@ -44,50 +110,14 @@ export async function registerWithHub(hubUrl: string, secret: string, existingAg
 
     const hubResponse = await axios.post(`${hubUrl}/api/v1/register`, handshakePayload, { timeout: 10000 });
 
-    if (hubResponse.status === 201) {
+    if (hubResponse.data.success) {
       const { agent_id, agent_token } = hubResponse.data;
-      
-      // Persist provisioned identifiers locally for resume support
-      await savePersistentConfig({ agent_id, agent_token });
-
-      return {
-        success: true,
-        agentId: agent_id,
-        agentToken: agent_token
-      };
+      await savePersistentConfig(agent_id, agent_token);
+      return { success: true, agentId: agent_id, agentToken: agent_token };
+    } else {
+      return { success: false, error: hubResponse.data.error || 'Hub registration handshake failed' };
     }
-
-    return { success: false, error: `Hub rejected registration with status: ${hubResponse.status}` };
-  } catch (error: any) {
-    if (error.response) {
-      return {
-        success: false,
-        error: error.response.data?.error || 'Hub registration handshake failed'
-      };
-    }
-    return { success: false, error: `Handshake network error: ${error.message}` };
-  }
-}
-
-/**
- * Loads the agent's identity configuration from the local filesystem.
- */
-export async function loadPersistentConfig(): Promise<AgentConfig | null> {
-  try {
-    const rawData = await fs.readFile(PERSISTENT_CONFIG_PATH, 'utf-8');
-    return JSON.parse(rawData) as AgentConfig;
   } catch (error) {
-    return null; // Config missing or unreadable
-  }
-}
-
-/**
- * Persists the agent's identity configuration to the local filesystem.
- */
-export async function savePersistentConfig(config: AgentConfig): Promise<void> {
-  try {
-    await fs.writeFile(PERSISTENT_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
-  } catch (error) {
-    console.error('[Config] Critical error: Failed to persist agent configuration:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
 }

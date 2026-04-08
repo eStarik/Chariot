@@ -1,33 +1,10 @@
-import { describe, it, expect, vi } from 'vitest';
-import { getClusterCapacity, getAgonesFleetSummary } from '../monitor';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { getClusterCapacity, getAgonesFleetSummary, getAgonesGameServerSummary } from '../monitor';
 
-// Mocking the Kubernetes client to support 1.4.0+ class structures
+// Mock for @kubernetes/client-node
+const mockListClusterCustomObject = vi.fn();
+
 vi.mock('@kubernetes/client-node', () => {
-const mockCoreApi = {
-    listNode: vi.fn().mockResolvedValue({
-      items: [
-        { status: { capacity: { cpu: '4', memory: '16Gi' } } }
-      ]
-    }),
-    listPodForAllNamespaces: vi.fn().mockResolvedValue({
-      items: [
-        { 
-          status: { phase: 'Running' },
-          spec: { containers: [{ resources: { requests: { cpu: '100m', memory: '256Mi' } } }] } 
-        }
-      ]
-    })
-  };
-
-  const mockCustomApi = {
-    listClusterCustomObject: vi.fn().mockResolvedValue({
-      items: [
-        {
-          metadata: { name: 'fleet-1', namespace: 'default' },
-          status: { readyReplicas: 5, allocatedReplicas: 2 }
-        }
-      ]
-    })
   };
 
   return {

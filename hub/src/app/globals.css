@@ -145,7 +145,7 @@ main {
 
 .formations-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   gap: 2rem;
   margin-bottom: 3rem;
 }
@@ -417,5 +417,46 @@ th {
 
 .validation-dot.invalid {
   background-color: #ff4444;
+}
+
+/* Premium Visual Utilities for Legion Snapshots */
+
+.grad-bronze {
+  background: linear-gradient(90deg, #8c6e40 0%, #b08d57 100%);
+  box-shadow: 0 0 10px rgba(176, 141, 87, 0.3);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--accent-bronze);
+  opacity: 0.5;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-red);
+}
+
+.formation-card .section-header {
+  border-bottom: 1px solid rgba(176, 141, 87, 0.1);
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  margin-top: 1.5rem;
+}
+
+.formation-card .section-header h4 {
+  letter-spacing: 4px;
+  transition: opacity 0.3s;
+}
+
+.formation-card .section-header:hover h4 {
+  opacity: 0.8;
+  color: var(--accent-bronze);
 }
 

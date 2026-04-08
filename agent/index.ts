@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { registerWithHub, loadPersistentConfig } from './logic';
-import { getClusterCapacity, getAgonesFleetSummary } from './monitor';
+import { getClusterCapacity, getAgonesFleetSummary, getAgonesGameServerSummary } from './monitor';
 import { pushReportToHub, ClusterReport } from './reporter';
 
 const HUB_URL = process.env.HUB_URL || 'http://localhost:3000';
@@ -43,6 +43,7 @@ async function startAgent() {
       
       const resources = await getClusterCapacity();
       const fleets = await getAgonesFleetSummary(NAMESPACES);
+      const servers = await getAgonesGameServerSummary(NAMESPACES);
 
       const telemetryReport: ClusterReport = {
         resources: {
@@ -54,6 +55,12 @@ async function startAgent() {
           replicas: f.ready + f.allocated, // Total replicas for simplify
           readyReplicas: f.ready,
           allocatedReplicas: f.allocated
+        })),
+        servers: servers.map((s: any) => ({
+          name: s.name,
+          state: s.state,
+          address: s.address,
+          port: s.port
         }))
       };
 

@@ -1,6 +1,6 @@
 # Chariot API Specifications v1
 
-## 🛡️ Security Architecture
+## Security Architecture
 
 State-management between **Spoke Agents** and the **HUB Coordinator** utilizes a two-tier authentication handshake.
 
@@ -10,9 +10,9 @@ State-management between **Spoke Agents** and the **HUB Coordinator** utilizes a
 
 ---
 
-## 🛰️ Agent Telemetry (Egress)
+## Agent Telemetry (Egress)
 
-### 🤝 Identity Handshake
+### Identity Handshake
 **Endpoint**: `POST /api/v1/register`  
 **Description**: Provision or resume an agent identity.
 
@@ -37,7 +37,7 @@ State-management between **Spoke Agents** and the **HUB Coordinator** utilizes a
 }
 ```
 
-### 📊 Telemetry Ingestion
+### Telemetry Ingestion
 **Endpoint**: `POST /api/v1/report`  
 **Permissions**: `X-Agent-ID` and `X-Agent-Token` headers required.
 
@@ -61,9 +61,9 @@ State-management between **Spoke Agents** and the **HUB Coordinator** utilizes a
 
 ---
 
-## 💻 Dashboard Integration (Ingress)
+## Dashboard Integration (Ingress)
 
-### 📈 Live Event Stream
+### Live Event Stream
 **Endpoint**: `GET /api/v1/events`  
 **Protocol**: Server-Sent Events (SSE)
 

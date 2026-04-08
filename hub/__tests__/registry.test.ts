@@ -7,19 +7,36 @@ const mockSelectFromValues = vi.fn();
 const mockUpdate = vi.fn();
 const mockInsert = vi.fn();
 
-vi.mock('@/lib/db', () => ({
-  db: {
-    select: vi.fn(() => ({
-      from: vi.fn(() => ({
-        where: vi.fn(() => ({ limit: mockLimit })),
-        limit: mockLimit,
-        then: (resolve: any) => mockSelectFromValues().then(resolve),
-      }))
-    })),
-    insert: vi.fn((...args) => mockInsert(...args)),
-    update: vi.fn((...args) => mockUpdate(...args)),
-  }
-}));
+vi.mock('@/lib/db', () => {
+  const selectChain = {
+    from: vi.fn(() => selectChain),
+    where: vi.fn(() => selectChain),
+    limit: vi.fn(() => selectChain),
+    not: vi.fn(() => selectChain),
+    eq: vi.fn(() => selectChain),
+    then: (resolve: any) => mockSelectFromValues().then(resolve),
+  };
+
+  return {
+    db: {
+      select: vi.fn(() => selectChain),
+      insert: vi.fn((...args) => mockInsert(...args)),
+      update: vi.fn(() => ({
+        set: vi.fn(() => ({
+          where: vi.fn().mockImplementation((...args) => {
+            mockUpdate(...args);
+            return Promise.resolve();
+          })
+        }))
+      })),
+      delete: vi.fn(() => ({
+        where: vi.fn().mockImplementation(() => {
+          return Promise.resolve();
+        })
+      })),
+    }
+  };
+});
 
 vi.mock('@/lib/db/schema', () => ({
   agents: { id: 'agents_table' },
@@ -34,14 +51,27 @@ describe('Hub Cluster Registry', () => {
     // Default implementations
     mockSelectFromValues.mockResolvedValue([]);
     mockLimit.mockResolvedValue([]);
-    mockUpdate.mockReturnValue({ set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) });
+    
     mockInsert.mockImplementation((table) => ({
-      values: vi.fn().mockImplementation((v) => ({
-        onConflictDoUpdate: vi.fn().mockReturnValue({
-          returning: vi.fn().mockResolvedValue([{ id: v.id || 'test-id', token: v.token || 'test-token', metadata: v.metadata || '{}' }])
-        }),
-        returning: vi.fn().mockResolvedValue([{ id: v.id || 'test-id', token: v.token || 'test-token', metadata: v.metadata || '{}' }])
-      }))
+      values: vi.fn().mockImplementation((v) => {
+        const val = Array.isArray(v) ? v[0] : v;
+        return {
+          onConflictDoUpdate: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValue([{ 
+              id: val.id || 'test-id', 
+              token: val.token || 'test-token', 
+              status: val.status || 'connected',
+              metadata: val.metadata || '{}' 
+            }])
+          }),
+          returning: vi.fn().mockResolvedValue([{ 
+            id: val.id || 'test-id', 
+            token: val.token || 'test-token', 
+            status: val.status || 'connected',
+            metadata: val.metadata || '{}' 
+          }])
+        };
+      })
     }));
   });
 
@@ -53,7 +83,7 @@ describe('Hub Cluster Registry', () => {
       fleets: [] 
     };
     
-    mockLimit.mockResolvedValueOnce([]); // Simulate agent not found
+    mockSelectFromValues.mockResolvedValueOnce([]); // Simulate agent not found during reporting select
 
     const ingestionResult = await saveClusterReport('unknown-id', telemetryPayload, validToken);
     
@@ -65,7 +95,7 @@ describe('Hub Cluster Registry', () => {
     const agentId = 'test-agent-001';
     
     // Simulate finding the agent during reporting
-    mockLimit.mockResolvedValueOnce([
+    mockSelectFromValues.mockResolvedValueOnce([
       { id: agentId, token: validToken, metadata: JSON.stringify({ clusterName: 'test-cluster' }) }
     ]);
 
@@ -74,28 +104,32 @@ describe('Hub Cluster Registry', () => {
         cpu: { capacity: '8', usage: '2' }, 
         memory: { capacity: '32', usage: '4' } 
       }, 
-      fleets: [{ name: 'hub-fleet', replicas: 15, readyReplicas: 10, allocatedReplicas: 5 }] 
+      fleets: [{ name: 'hub-fleet', replicas: 15, readyReplicas: 10, allocatedReplicas: 5 }],
+      servers: [{ name: 'gs-01', state: 'Ready', address: '1.2.3.4', port: 7000 }]
     };
 
     const ingestionResult = await saveClusterReport(agentId, telemetryPayload, validToken);
     expect(ingestionResult.success).toBe(true);
     expect(mockUpdate).toHaveBeenCalled();
 
-    // Verify snapshot logic
+    // Verify snapshot logic with status and servers
     mockSelectFromValues.mockResolvedValueOnce([
       { 
         id: agentId, 
         token: validToken, 
+        status: 'connected',
         metadata: JSON.stringify({ clusterName: 'test-cluster' }),
         resources: JSON.stringify(telemetryPayload.resources),
         fleets: JSON.stringify(telemetryPayload.fleets),
+        servers: JSON.stringify(telemetryPayload.servers),
         last_report_at: new Date()
       }
     ]);
 
     const snapshot = await getRegistrySnapshot();
-    expect(snapshot[agentId].resources?.cpu.capacity).toBe('8');
-    expect(snapshot[agentId].fleets).toHaveLength(1);
+    expect(snapshot[agentId].status).toBe('connected');
+    expect(snapshot[agentId].servers).toHaveLength(1);
+    expect(snapshot[agentId].servers?.[0].name).toBe('gs-01');
     expect(snapshot[agentId].lastReportTimestamp).toBeDefined();
   });
 });

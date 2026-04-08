@@ -18,9 +18,19 @@ Currently in early development, the goal of this project is to provide game deve
 * **Lifecycle Management:** Easily monitor allocation states, health checks, and server shutdowns.
 * **Lightweight Footprint:** A clean, focused UI that runs efficiently inside your existing Kubernetes cluster.
 
-### [+] Getting Started
+### [+] Local Development
 
-*(Installation instructions and deployment manifests will be added as the project reaches its first runnable state.)*
+For high-fidelity local testing within a Kubernetes cluster (Docker Desktop, KinD, etc.), use the categorical overrides found in `values.local.yaml`.
+
+```bash
+# 1. Deploy the Hub with local overrides
+helm install chariot-hub ./charts/chariot-hub -f ./charts/chariot-hub/values.local.yaml
+
+# 2. Deploy the Agent monitor to your Agones cluster
+helm install chariot-agent ./charts/chariot-agent -f ./charts/chariot-agent/values.local.yaml
+```
+
+Refer to the [Architecture Documentation](./docs/ARCHITECTURE.md) for detailed coordination of the security handshake and telemetry hierarchy.
 
 ### [+] License & Commercial Use
 

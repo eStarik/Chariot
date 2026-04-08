@@ -1,0 +1,19 @@
+# --- Local Test Overrides for Chariot Hub ---
+# Usage: helm install chariot-hub ./charts/chariot-hub -f ./charts/chariot-hub/values.yaml -f ./charts/chariot-hub/values.local.yaml
+
+image:
+  pullPolicy: Always
+  tag: "latest"
+
+service:
+  type: LoadBalancer # Easier access in local Docker Desktop / KinD environments
+
+env:
+  sharedSecret: "chariot-test-secret"
+
+postgresql:
+  persistence:
+    enabled: false # Avoid PV wait times in ephemeral local clusters
+  primary:
+    extendedConfiguration: |
+      max_connections = 100

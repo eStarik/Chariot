@@ -1,52 +1,76 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import axios from 'axios';
-import { registerWithHub, loadPersistentConfig, savePersistentConfig } from '../logic';
+import { registerWithHub, loadPersistentConfig } from '../logic';
+
+// Create a high-fidelity mock for @kubernetes/client-node
+const mockReadNamespacedSecret = vi.fn();
+const mockCreateNamespacedSecret = vi.fn();
+const mockReplaceNamespacedSecret = vi.fn();
+
+vi.mock('@kubernetes/client-node', () => {
+  return {
+    KubeConfig: vi.fn().mockImplementation(() => ({
+      loadFromDefault: vi.fn(),
+      makeApiClient: vi.fn().mockImplementation(() => ({
+        readNamespacedSecret: mockReadNamespacedSecret,
+        createNamespacedSecret: mockCreateNamespacedSecret,
+        replaceNamespacedSecret: mockReplaceNamespacedSecret,
+      })),
+    })),
+    CoreV1Api: vi.fn(),
+  };
+});
 
 vi.mock('axios');
-vi.mock('fs/promises');
 
-describe('Agent Registration Logic (Persistent)', () => {
+describe('Agent Identity Persistence (Kubernetes Secrets)', () => {
   beforeEach(() => {
     vi.resetAllMocks();
   });
 
-  it('should return agent_id and agent_token on first join', async () => {
-    const mockHubResponse = { 
-      data: { agent_id: 'test-uuid-123', agent_token: 'secure-token-abc' }, 
-      status: 201 
-    };
-    (axios.post as any).mockResolvedValue(mockHubResponse);
-
-    const identityResult = await registerWithHub('http://hub-url', 'my-secret');
+  it('should successfully load persistent identity from cluster Secret', async () => {
+    const mockAgentId = 'agent-007';
+    const mockToken = 'quantum-token-123';
     
-    expect(identityResult.success).toBe(true);
-    expect(identityResult.agentId).toBe('test-uuid-123');
-    expect(identityResult.agentToken).toBe('secure-token-abc');
+    mockReadNamespacedSecret.mockResolvedValueOnce({
+      data: {
+        agent_id: Buffer.from(mockAgentId).toString('base64'),
+        agent_token: Buffer.from(mockToken).toString('base64')
+      }
+    });
+
+    const config = await loadPersistentConfig();
+    expect(config).not.toBeNull();
+    expect(config?.agent_id).toBe(mockAgentId);
+    expect(config?.agent_token).toBe(mockToken);
   });
 
-  it('should include agent_id in request if already registered', async () => {
-    const mockHubResponse = { 
-      data: { agent_id: 'existing-uuid', agent_token: 'existing-token' }, 
-      status: 201 
-    };
-    (axios.post as any).mockResolvedValue(mockHubResponse);
+  it('should provision and persist new identity into cluster Secret', async () => {
+    const hubUrl = 'http://chariot-hub';
+    const sharedSecret = 'handshake-secret';
+    const newId = 'new-agent-uuid';
+    const newToken = 'new-session-token';
 
-    const identityResult = await registerWithHub('http://hub-url', 'my-secret', 'existing-uuid');
-    
-    // Verify parameters align with the refined HandshakePayload structure
-    expect(axios.post).toHaveBeenCalledWith(
-      expect.stringContaining('/api/v1/register'),
-      expect.objectContaining({ 
-        agent_id: 'existing-uuid', 
-        secret: 'my-secret',
-        metadata: expect.objectContaining({
-          clusterName: expect.any(String)
-        })
-      }),
-      expect.objectContaining({
-        timeout: 10000
+    // 1. Mock Hub response
+    (axios.post as any).mockResolvedValue({
+      data: { success: true, agent_id: newId, agent_token: newToken }
+    });
+
+    // 2. Mock Secret upsert logic
+    mockReplaceNamespacedSecret.mockResolvedValue({});
+
+    const result = await registerWithHub(hubUrl, sharedSecret);
+
+    expect(result.success).toBe(true);
+    expect(result.agentId).toBe(newId);
+    expect(mockReplaceNamespacedSecret).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'chariot-agent-identity',
+      body: expect.objectContaining({
+        data: {
+          agent_id: Buffer.from(newId).toString('base64'),
+          agent_token: Buffer.from(newToken).toString('base64')
+        }
       })
-    );
-    expect(identityResult.success).toBe(true);
+    }));
   });
 });
