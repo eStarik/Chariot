@@ -25,7 +25,8 @@ vi.mock('@/lib/db', () => ({
 vi.mock('@/lib/db/schema', () => ({
   agents: { id: 'agents_table' },
   formations: { id: 'formations_table' },
-  settings: { id: 'settings_table' }
+  settings: { id: 'settings_table' },
+  users: { id: 'users_table' }
 }));
 
 describe('Agent Registration Protocol (Secure)', () => {

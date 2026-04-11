@@ -25,7 +25,10 @@ export interface RegistrationPayload {
 /**
  * Validates agent registration against the system's SHARED_SECRET.
  * Handles both new registrations (generating IDs/Tokens) and 
- * re-connection logic for existing agents.
+ * re-connection logic for existing agents (via persistent ID or cluster Fingerprint).
+ * 
+ * @param payload The registration attempt containing the secret, metadata, and optional identity markers.
+ * @returns RegistrationResult containing the agent's persistent identity and access token.
  */
 export async function validateRegistration(payload: RegistrationPayload): Promise<RegistrationResult> {
   const { secret, agent_id, metadata } = payload;

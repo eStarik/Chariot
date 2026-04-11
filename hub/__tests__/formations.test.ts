@@ -21,7 +21,8 @@ vi.mock('@/lib/db', () => ({
 
 vi.mock('@/lib/db/schema', () => ({
   formations: { id: 'formations_table' },
-  settings: { id: 'settings_table' }
+  settings: { id: 'settings_table' },
+  users: { id: 'users_table' }
 }));
 
 describe('Formations Logic', () => {
@@ -43,8 +44,9 @@ describe('Formations Logic', () => {
       );
     });
 
-    it('should NOT insert anything if formations already exist', async () => {
-      mockSelectFrom.mockResolvedValueOnce([{ id: 'existing' }]); // Simulate populated DB
+    it('should NOT insert anything if both formations and users already exist', async () => {
+      mockSelectFrom.mockResolvedValueOnce([{ id: 'existing-formation' }]) // For formations check
+                    .mockResolvedValueOnce([{ id: 'existing-admin' }]);    // For users check
       await seedDatabase();
       
       expect(mockInsert).not.toHaveBeenCalled();

@@ -24,6 +24,9 @@ spec:
     {{- end }}
   {{- end }}
   rules:
+    {{- $globalDomain := .Values.global.domain -}}
+    {{- $fullname := include "chariot-hub.fullname" . -}}
+    {{- if and .Values.ingress.hosts (not (empty .Values.ingress.hosts)) }}
     {{- range .Values.ingress.hosts }}
     - host: {{ .host | quote }}
       http:
@@ -33,9 +36,21 @@ spec:
             pathType: {{ .pathType }}
             backend:
               service:
-                name: {{ include "chariot-hub.fullname" $ }}
+                name: {{ $fullname }}
                 port:
                   number: {{ $.Values.service.port }}
           {{- end }}
+    {{- end }}
+    {{- else if $globalDomain }}
+    - host: {{ printf "chariot.%s" $globalDomain | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: {{ $fullname }}
+                port:
+                  number: {{ .Values.service.port }}
     {{- end }}
 {{- end }}

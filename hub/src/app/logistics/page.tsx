@@ -3,6 +3,99 @@
 import React, { useState, useEffect } from 'react';
 import { useTelemetry } from '@/components/TelemetryContext';
 
+// --- User Management Component ---
+const UserManagement = () => {
+  const [users, setUsers] = useState<any[]>([]);
+  const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'commander' });
+  const [status, setStatus] = useState<string | null>(null);
+
+  const fetchUsers = async () => {
+    const res = await fetch('/api/v1/users');
+    const data = await res.json();
+    if (data.success) setUsers(data.users);
+  };
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = await fetch('/api/v1/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newUser)
+    });
+    if (res.ok) {
+      setStatus('Commander Commissioned.');
+      setNewUser({ name: '', email: '', password: '', role: 'commander' });
+      fetchUsers();
+      setTimeout(() => setStatus(null), 3000);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    const res = await fetch(`/api/v1/users?id=${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      setStatus('Commander Decommissioned.');
+      fetchUsers();
+      setTimeout(() => setStatus(null), 3000);
+    } else {
+      const data = await res.json();
+      setStatus(`Error: ${data.error}`);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-2">
+        {users.map(u => (
+          <div key={u.id} className="flex justify-between items-center bg-white/5 p-3 border-l border-bronze/30">
+            <div>
+              <span className="text-xs font-black uppercase text-bronze mr-4">{u.name}</span>
+              <span className="text-[10px] opacity-40 font-mono">{u.email}</span>
+            </div>
+            <div className="flex items-center gap-6">
+              <span className="text-[9px] font-black tracking-widest bg-bronze/10 px-2 py-1 text-bronze uppercase">{u.role}</span>
+              <button 
+                onClick={() => handleDelete(u.id)}
+                className="text-[10px] text-red-500 font-bold hover:underline opacity-50 hover:opacity-100 uppercase"
+              >
+                Decommission
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ borderTop: '1px solid rgba(176, 141, 87, 0.1)', paddingTop: '1.5rem' }}>
+        <h5 className="text-[10px] text-bronze uppercase font-black mb-4">Commission New Commander</h5>
+        <form onSubmit={handleCreate} className="grid grid-cols-4 gap-4">
+          <input 
+            type="text" placeholder="NAME" 
+            className="p-2 text-[10px] font-mono bg-[#121212] border border-white/10 outline-none text-white focus:border-bronze"
+            value={newUser.name} onChange={e => setNewUser({...newUser, name: e.target.value})}
+          />
+          <input 
+            type="email" placeholder="EMAIL" 
+            className="p-2 text-[10px] font-mono bg-[#121212] border border-white/10 outline-none text-white focus:border-bronze"
+            value={newUser.email} onChange={e => setNewUser({...newUser, email: e.target.value})}
+          />
+          <input 
+            type="password" placeholder="PASSWORD" 
+            className="p-2 text-[10px] font-mono bg-[#121212] border border-white/10 outline-none text-white focus:border-bronze"
+            value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})}
+          />
+          <button type="submit" className="bg-bronze text-[#121212] text-[10px] font-black uppercase hover:bg-white transition-colors">
+            Commission
+          </button>
+        </form>
+      </div>
+      {status && <div className="text-[10px] font-mono text-bronze text-center mt-4 tracking-widest">[ {status.toUpperCase()} ]</div>}
+    </div>
+  );
+};
+
 // --- Click-to-Copy Component ---
 const CopyText = ({ text, label }: { text: string; label?: string }) => {
   const [copied, setCopied] = useState(false);
@@ -129,6 +222,18 @@ export default function LogisticsPage() {
                  <CopyText label="Registry Handshake Token" text="AGONES-COORD-MASTER-HANDSHAKE-0xA9" />
               </div>
            </div>
+        </div>
+
+        <div className="section-header">
+           <h2>Legion Command</h2>
+           <span className="text-muted" style={{ fontSize: '0.9rem' }}>Personnel management and permission assignments.</span>
+        </div>
+
+        <div className="grid grid-cols-1 gap-8 mb-12">
+            <div className="formation-card">
+               <h4 className="text-bronze mb-4 uppercase text-xs tracking-widest font-black">Authorized Commanders</h4>
+               <UserManagement />
+            </div>
         </div>
 
         <div className="section-header">

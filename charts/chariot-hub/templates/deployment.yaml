@@ -38,6 +38,30 @@ spec:
           {{- end }}
         - name: NODE_ENV
           value: "production"
+        {{- if .Values.auth.enabled }}
+        - name: AUTH_TRUST_HOST
+          value: "true"
+        - name: AUTH_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "chariot-hub.fullname" . }}
+              key: authSecret
+        {{- $globalDomain := .Values.global.domain -}}
+        {{- if or $globalDomain .Values.auth.url (and .Values.ingress.enabled .Values.ingress.hosts (not (empty .Values.ingress.hosts))) }}
+        - name: AUTH_URL
+          {{- $url := .Values.auth.url -}}
+          {{- if not $url }}
+            {{- $host := "" -}}
+            {{- if and .Values.ingress.hosts (not (empty .Values.ingress.hosts)) }}
+              {{- $host = (index .Values.ingress.hosts 0).host -}}
+            {{- else }}
+              {{- $host = printf "chariot.%s" $globalDomain -}}
+            {{- end }}
+            {{- $url = printf "https://%s" $host -}}
+          {{- end }}
+          value: {{ $url | quote }}
+        {{- end }}
+        {{- end }}
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
         livenessProbe:

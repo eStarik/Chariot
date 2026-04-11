@@ -29,6 +29,8 @@ export interface RegistrationResult {
 /**
  * Attempts to load persistent identity (agent_id and token) from a Kubernetes Secret.
  * This foundationally ensures persistence across pod restarts without local volumes.
+ * 
+ * @returns Object containing agent_id and agent_token if successful, otherwise null.
  */
 export async function loadPersistentConfig(): Promise<{ agent_id: string; agent_token: string } | null> {
   try {
@@ -50,7 +52,11 @@ export async function loadPersistentConfig(): Promise<{ agent_id: string; agent_
 
 /**
  * Persists registration identity into a Kubernetes Secret.
- * Synchronizes the monitor's identity with the cluster control plane.
+ * Synchronizes the monitor's identity with the cluster control plane to ensure 
+ * survivability during pod eviction or updates.
+ * 
+ * @param agentId The persistent identifier granted by the Hub.
+ * @param agentToken The secure access token granted by the Hub.
  */
 async function savePersistentConfig(agentId: string, agentToken: string): Promise<void> {
   const secretData = {
@@ -122,6 +128,12 @@ async function savePersistentConfig(agentId: string, agentToken: string): Promis
 
 /**
  * Orchestrates the registration handshake with the Hub coordinator.
+ * Exchanges the shared secret and cluster fingerprint for a unique Legion identity.
+ * 
+ * @param hubUrl The base URL of the Hub service.
+ * @param secret The platform-wide Shared Secret.
+ * @param existingAgentId Optional ID to attempt re-authentication if known.
+ * @returns Success status and the newly acquired identity details.
  */
 export async function registerWithHub(hubUrl: string, secret: string, existingAgentId?: string): Promise<RegistrationResult> {
   try {

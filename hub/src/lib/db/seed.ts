@@ -1,9 +1,11 @@
 import { db } from './index';
-import { formations } from './schema';
+import { formations, users } from './schema';
 import { v4 as uuidv4 } from 'uuid';
+import bcrypt from 'bcryptjs';
 
 export async function seedDatabase() {
   try {
+    // Check for formations
     const existingFormations = await db.select().from(formations);
     
     if (existingFormations.length === 0) {
@@ -76,6 +78,8 @@ spec:
       await db.insert(formations).values([cs2, mc]);
       console.log('[DB] Successfully seeded GameServer templates.');
     }
+
+    // Admin user will be created via /setup walkthrough
   } catch (error) {
     console.error('[DB] Error seeding:', error);
   }
