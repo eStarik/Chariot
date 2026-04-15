@@ -30,6 +30,7 @@ build_full.log
 playwright-report/
 test-results/
 coverage/
+.dev/
 
 # IDEs and OS
 .vscode/

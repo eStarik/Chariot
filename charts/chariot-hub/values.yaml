@@ -1,7 +1,7 @@
 replicaCount: 1
 
 global:
-  domain: "" # e.g. "kamleitner.net"
+  domain: "" # e.g. "example.com"
 
 image:
   repository: ghcr.io/estarik/chariot-hub
@@ -68,19 +68,16 @@ networkPolicy:
 auth:
   enabled: true
   secret: "change-this-secret" # Used for JWT signing
-  url: "" # Optional: Manual override for AUTH_URL
+  url: "https://chariot.example.com" # Manual override for AUTH_URL
   native:
     enabled: true
-    # initialAdminPassword: "admin" # Set this to override default admin password
-  oauth:
+    # initialAdminPassword: "admin"
+  oidc:
     enabled: false
-    providers: []
-    # - name: github
-    #   clientId: ""
-    #   clientSecret: ""
-  saml:
-    enabled: false
-    providers: []
-    # - name: okta
-    #   metadataUrl: ""
-    #   entityId: ""
+    issuer: "" # e.g. https://auth.example.com/realms/chariot
+    clientId: "chariot-hub"
+    clientSecret: ""
+    groupsClaim: "groups"
+  adminGroups:
+    - "chariot-admins"
+    - "platform-engineers"

@@ -10,7 +10,10 @@ export const dynamic = 'force-dynamic';
  * POST /api/v1/report
  */
 export async function POST(request: NextRequest) {
+  console.log('\n\n======================================');
   console.log('[Telemetry] Inbound report request received');
+  console.log('HEADERS:', Object.fromEntries(request.headers.entries()));
+  console.log('======================================\n\n');
   try {
     const agentId = request.headers.get('X-Agent-ID');
     const agentToken = request.headers.get('X-Agent-Token');

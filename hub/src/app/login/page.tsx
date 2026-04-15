@@ -81,17 +81,10 @@ export default function LoginPage() {
         <div className="provider-buttons">
           <button 
             type="button" 
-            className="provider-btn" 
-            onClick={() => signIn('github')}
+            className="provider-btn provider-btn--keycloak" 
+            onClick={() => signIn('keycloak', { callbackUrl: '/' })}
           >
-            GitHub
-          </button>
-          <button 
-            type="button" 
-            className="provider-btn" 
-            onClick={() => signIn('google')}
-          >
-            Google
+            🔐 Keycloak SSO
           </button>
         </div>
 
@@ -240,8 +233,8 @@ export default function LoginPage() {
 
         .provider-buttons {
           display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 1.5rem;
+          grid-template-columns: 1fr;
+          gap: 1rem;
         }
 
         .provider-btn {
@@ -258,9 +251,14 @@ export default function LoginPage() {
         }
 
         .provider-btn:hover {
-          border-color: var(--accent-red);
-          background: rgba(155, 17, 30, 0.05);
-          color: var(--accent-red);
+          border-color: var(--accent-bronze);
+          background: rgba(176, 141, 87, 0.08);
+          color: var(--accent-bronze);
+        }
+
+        .provider-btn--keycloak {
+          border-color: rgba(176, 141, 87, 0.5);
+          letter-spacing: 2px;
         }
 
         .error-message {

@@ -27,7 +27,14 @@ vi.mock('@/lib/db/schema', () => ({
 
 describe('Formations Logic', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    // Re-setup the implementation chains since resetAllMocks clears them
+    mockSelect.mockReturnValue({ from: mockSelectFrom });
+    mockInsert.mockReturnValue({ values: mockInsertValues });
+    mockUpdate.mockReturnValue({ set: mockSet });
+    mockSet.mockReturnValue({ where: vi.fn().mockResolvedValue([]) });
+    mockSelectFrom.mockResolvedValue([]);
+    mockInsertValues.mockResolvedValue([]);
   });
 
   describe('Database Seeding', () => {
@@ -55,10 +62,15 @@ describe('Formations Logic', () => {
 
   describe('API Endpoints', () => {
     it('GET /api/v1/formations should return array', async () => {
+      // Use mockResolvedValue directly to avoid consumption mismatches
       mockSelectFrom.mockResolvedValueOnce([{ name: 'Test' }]);
+      
       const res = await GET();
       const json = await res.json();
+      
       expect(json.success).toBe(true);
+      expect(json.formations).toBeDefined();
+      expect(json.formations.length).toBeGreaterThan(0);
       expect(json.formations[0].name).toBe('Test');
     });
 

@@ -6,7 +6,7 @@ export default auth((req) => {
 
   const isApiRoute = nextUrl.pathname.startsWith("/api");
   const isAuthRoute = nextUrl.pathname.startsWith("/api/auth");
-  const isPublicApiRoute = nextUrl.pathname.startsWith("/api/v1/register") || nextUrl.pathname.startsWith("/api/health") || nextUrl.pathname.startsWith("/api/v1/setup");
+  const isPublicApiRoute = nextUrl.pathname.startsWith("/api/v1/register") || nextUrl.pathname.startsWith("/api/v1/report") || nextUrl.pathname.startsWith("/api/health") || nextUrl.pathname.startsWith("/api/v1/setup");
   const isLoginPage = nextUrl.pathname.startsWith("/login");
   const isSetupPage = nextUrl.pathname.startsWith("/setup");
 

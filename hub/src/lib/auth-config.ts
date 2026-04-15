@@ -1,15 +1,19 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import Github from "next-auth/providers/github";
-import Google from "next-auth/providers/google";
+import Keycloak from "next-auth/providers/keycloak";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { db } from "./db";
 import { users } from "./db/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
+// Conditionally use the DB adapter — JWT strategy works without it for OIDC-only flows
+const adapterConfig = process.env.DATABASE_URL
+  ? { adapter: DrizzleAdapter(db) }
+  : {};
+
 export const authOptions = {
-  adapter: DrizzleAdapter(db),
+  ...adapterConfig,
   session: { strategy: "jwt" as const },
   providers: [
     Credentials({
@@ -40,23 +44,50 @@ export const authOptions = {
         };
       },
     }),
-    ...(process.env.AUTH_GITHUB_ID ? [Github({
-      clientId: process.env.AUTH_GITHUB_ID,
-      clientSecret: process.env.AUTH_GITHUB_SECRET,
-    })] : []),
-    ...(process.env.AUTH_GOOGLE_ID ? [Google({
-      clientId: process.env.AUTH_GOOGLE_ID,
-      clientSecret: process.env.AUTH_GOOGLE_SECRET,
+    ...(process.env.AUTH_KEYCLOAK_ID ? [Keycloak({
+      clientId: process.env.AUTH_KEYCLOAK_ID,
+      clientSecret: process.env.AUTH_KEYCLOAK_SECRET,
+      issuer: process.env.AUTH_KEYCLOAK_ISSUER,
+      profile(profile) {
+        // Extract Admin Groups from the profile (typically 'groups' or 'roles' claim)
+        const userGroups = (profile as any).groups || [];
+        const adminGroups = (process.env.AUTH_ADMIN_GROUPS || "").split(",").filter(Boolean);
+        
+        const isAdmin = userGroups.some((group: string) => adminGroups.includes(group));
+
+        return {
+          id: profile.sub,
+          name: profile.name ?? profile.preferred_username,
+          email: profile.email,
+          image: profile.picture,
+          role: isAdmin ? "commander" : "commander", // Standard user still gets visibility, but logic below handles it
+        };
+      },
     })] : []),
   ],
   pages: {
     signIn: "/login",
   },
   callbacks: {
-    async jwt({ token, user }: any) {
+    async jwt({ token, user, profile }: any) {
       if (user) {
         token.id = user.id;
-        token.role = user.role || 'commander';
+        
+        // Handle Role Mapping for OIDC users
+        if (profile) {
+          const userGroups = (profile as any).groups || [];
+          const adminGroups = (process.env.AUTH_ADMIN_GROUPS || "").split(",").filter(Boolean);
+          const isAdmin = userGroups.some((group: string) => adminGroups.includes(group));
+          
+          token.role = isAdmin ? "commander" : "peltast";
+          
+          // Force update the DB role to ensure consistency with SSO claims if DB is configured
+          if (process.env.DATABASE_URL) {
+            await db.update(users).set({ role: token.role }).where(eq(users.id, user.id));
+          }
+        } else {
+          token.role = user.role || 'commander';
+        }
       }
       return token;
     },

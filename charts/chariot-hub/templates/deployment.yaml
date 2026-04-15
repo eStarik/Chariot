@@ -52,7 +52,7 @@ spec:
           {{- $url := .Values.auth.url -}}
           {{- if not $url }}
             {{- $host := "" -}}
-            {{- if and .Values.ingress.hosts (not (empty .Values.ingress.hosts)) }}
+            {{- if and .Values.ingress.enabled .Values.ingress.hosts (not (empty .Values.ingress.hosts)) }}
               {{- $host = (index .Values.ingress.hosts 0).host -}}
             {{- else }}
               {{- $host = printf "chariot.%s" $globalDomain -}}
@@ -60,6 +60,25 @@ spec:
             {{- $url = printf "https://%s" $host -}}
           {{- end }}
           value: {{ $url | quote }}
+        {{- end }}
+        {{- if .Values.auth.oidc.enabled }}
+        - name: AUTH_KEYCLOAK_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "chariot-hub.fullname" . }}
+              key: oidcClientId
+        - name: AUTH_KEYCLOAK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "chariot-hub.fullname" . }}
+              key: oidcClientSecret
+        - name: AUTH_KEYCLOAK_ISSUER
+          value: {{ .Values.auth.oidc.issuer | quote }}
+        - name: AUTH_ADMIN_GROUPS
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "chariot-hub.fullname" . }}
+              key: adminGroups
         {{- end }}
         {{- end }}
         resources:
