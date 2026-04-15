@@ -46,8 +46,8 @@ describe('Agent Monitoring Logic', () => {
     const fleets = await getAgonesFleetSummary(namespaces);
     
     expect(fleets).toHaveLength(1);
-    expect(fleets[0].fleetName).toBe('fleet-1');
-    expect(fleets[0].ready).toBe(5);
-    expect(fleets[0].allocated).toBe(2);
+    expect(fleets[0].name).toBe('fleet-1');
+    expect(fleets[0].readyReplicas).toBe(5);
+    expect(fleets[0].allocatedReplicas).toBe(2);
   });
 });
