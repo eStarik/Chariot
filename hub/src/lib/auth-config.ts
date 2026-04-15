@@ -1,4 +1,4 @@
-import NextAuth from "next-auth";
+import NextAuth, { customFetch } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Keycloak from "next-auth/providers/keycloak";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
@@ -11,6 +11,19 @@ import bcrypt from "bcryptjs";
 const adapterConfig = process.env.DATABASE_URL
   ? { adapter: DrizzleAdapter(db) }
   : {};
+
+// Custom fetch to route OIDC calls correctly between Internal (Cluster) and External (Browser) URLs
+const oidcFetch = (url: string | Request | URL, init?: RequestInit) => {
+  const urlString = url.toString();
+  const issuer = process.env.AUTH_KEYCLOAK_ISSUER || "";
+  const serverUrl = process.env.AUTH_KEYCLOAK_SERVER_URL || "";
+
+  if (issuer && serverUrl && urlString.startsWith(issuer)) {
+    const internalUrl = urlString.replace(issuer, `${serverUrl}/realms/chariot`);
+    return fetch(internalUrl, init);
+  }
+  return fetch(url, init);
+};
 
 export const authOptions = {
   ...adapterConfig,
@@ -48,11 +61,12 @@ export const authOptions = {
       clientId: process.env.AUTH_KEYCLOAK_ID,
       clientSecret: process.env.AUTH_KEYCLOAK_SECRET,
       issuer: process.env.AUTH_KEYCLOAK_ISSUER,
+      // Provide the custom fetch to ensure discovery and token calls use the internal DNS
+      [customFetch]: oidcFetch as any,
       profile(profile) {
-        // Extract Admin Groups from the profile (typically 'groups' or 'roles' claim)
+        // Extract Admin Groups from the profile
         const userGroups = (profile as any).groups || [];
         const adminGroups = (process.env.AUTH_ADMIN_GROUPS || "").split(",").filter(Boolean);
-        
         const isAdmin = userGroups.some((group: string) => adminGroups.includes(group));
 
         return {
@@ -60,7 +74,7 @@ export const authOptions = {
           name: profile.name ?? profile.preferred_username,
           email: profile.email,
           image: profile.picture,
-          role: isAdmin ? "commander" : "commander", // Standard user still gets visibility, but logic below handles it
+          role: isAdmin ? "commander" : "peltast",
         };
       },
     })] : []),

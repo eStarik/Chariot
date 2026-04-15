@@ -40,7 +40,7 @@ export const settings = pgTable('settings', {
 
 // --- Auth.js (NextAuth) Tables ---
 
-export const users = pgTable('user', {
+export const users = pgTable('chariots_users', {
   id: text('id').primaryKey(),
   name: text('name'),
   email: text('email').unique(),

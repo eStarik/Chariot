@@ -1,7 +1,11 @@
 const postgres = require('postgres');
 
 async function verify() {
-  const sql = postgres('postgres://postgres:mysecretpassword@localhost:5434/chariot');
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error("DATABASE_URL environment variable is required.");
+  }
+  const sql = postgres(connectionString);
   try {
     const tables = await sql`
       SELECT table_name 

@@ -74,6 +74,10 @@ spec:
               key: oidcClientSecret
         - name: AUTH_KEYCLOAK_ISSUER
           value: {{ .Values.auth.oidc.issuer | quote }}
+        {{- if .Values.auth.oidc.serverUrl }}
+        - name: AUTH_KEYCLOAK_SERVER_URL
+          value: {{ .Values.auth.oidc.serverUrl | quote }}
+        {{- end }}
         - name: AUTH_ADMIN_GROUPS
           valueFrom:
             secretKeyRef:

@@ -11,6 +11,15 @@ service:
 env:
   sharedSecret: "chariot-test-secret"
 
+auth:
+  url: "http://localhost:3000"
+  oidc:
+    enabled: true
+    issuer: "http://localhost:8080/realms/chariot"
+    serverUrl: "http://keycloak.keycloak:8080"
+    clientId: "chariot-hub"
+    clientSecret: "chariot-secret-1234"
+
 postgresql:
   persistence:
     enabled: false # Avoid PV wait times in ephemeral local clusters

@@ -10,9 +10,18 @@ const UserManagement = () => {
   const [status, setStatus] = useState<string | null>(null);
 
   const fetchUsers = async () => {
-    const res = await fetch('/api/v1/users');
-    const data = await res.json();
-    if (data.success) setUsers(data.users);
+    try {
+      const res = await fetch('/api/v1/users');
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`[${res.status}] ${text.substring(0, 100)}`);
+      }
+      const data = await res.json();
+      if (data.success) setUsers(data.users);
+    } catch (e: any) {
+      console.error('Failed to fetch users:', e);
+      setStatus(`Deployment Error: ${e.message}`);
+    }
   };
 
   useEffect(() => {
@@ -141,12 +150,19 @@ export default function LogisticsPage() {
   const fetchSettings = async () => {
     try {
       const res = await fetch('/api/v1/settings');
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`[${res.status}] ${text.substring(0, 50)}`);
+      }
       const data = await res.json();
       if (data.success) {
         const mapped = data.settings.reduce((acc: any, s: any) => ({ ...acc, [s.key]: s.value }), {});
         setSettings(mapped);
       }
-    } catch (e) {}
+    } catch (e: any) {
+      console.error('Failed to fetch settings:', e);
+      setSaveStatus(`LOGISTICS FAILURE: ${e.message}`);
+    }
   };
 
   useEffect(() => {

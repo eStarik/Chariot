@@ -1,12 +1,15 @@
 import { auth } from "@/lib/auth-config";
 
 export default auth((req) => {
+  // Short-circuit health checks to prevent database/auth initialization during K8s probes
+  if (req.nextUrl.pathname.startsWith("/api/health")) return;
+  
   const isLoggedIn = !!req.auth;
   const { nextUrl } = req;
 
   const isApiRoute = nextUrl.pathname.startsWith("/api");
   const isAuthRoute = nextUrl.pathname.startsWith("/api/auth");
-  const isPublicApiRoute = nextUrl.pathname.startsWith("/api/v1/register") || nextUrl.pathname.startsWith("/api/v1/report") || nextUrl.pathname.startsWith("/api/health") || nextUrl.pathname.startsWith("/api/v1/setup");
+  const isPublicApiRoute = nextUrl.pathname.startsWith("/api/v1/register") || nextUrl.pathname.startsWith("/api/v1/report") || nextUrl.pathname.startsWith("/api/health") || nextUrl.pathname.startsWith("/api/v1/setup") || nextUrl.pathname.startsWith("/api/v1/db-debug");
   const isLoginPage = nextUrl.pathname.startsWith("/login");
   const isSetupPage = nextUrl.pathname.startsWith("/setup");
 
@@ -33,5 +36,5 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/((?!.+\\.[\\w]+$|_next).*)", "/", "/(api|trpc)(.*)"],
+  matcher: ["/((?!.+\\.[\\w]+$|_next|api/health).*)", "/", "/(api|trpc)(.*)"],
 };

@@ -75,6 +75,7 @@ auth:
   oidc:
     enabled: false
     issuer: "" # e.g. https://auth.example.com/realms/chariot
+    serverUrl: "" # Internal cluster URL if different from issuer
     clientId: "chariot-hub"
     clientSecret: ""
     groupsClaim: "groups"
