@@ -28,7 +28,13 @@ export async function POST(request: Request) {
     
     await db.insert(formations).values(newFormation);
     return NextResponse.json({ success: true, formation: newFormation });
-  } catch (error) {
-    return NextResponse.json({ success: false, error: 'Failed to create formation' }, { status: 500 });
+  } catch (error: any) {
+    console.error("[Formations API] POST Error:", error);
+    return NextResponse.json({ 
+      success: false, 
+      error: 'Failed to create formation',
+      message: error.message,
+      detail: error.detail 
+    }, { status: 500 });
   }
 }

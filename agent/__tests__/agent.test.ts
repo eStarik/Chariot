@@ -2,25 +2,36 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import axios from 'axios';
 import { registerWithHub, loadPersistentConfig } from '../logic';
 
-const { mockReadNamespacedSecret, mockCreateNamespacedSecret, mockReplaceNamespacedSecret } = vi.hoisted(() => ({
-  mockReadNamespacedSecret: vi.fn(),
-  mockCreateNamespacedSecret: vi.fn(),
-  mockReplaceNamespacedSecret: vi.fn(),
-}));
+const { mockCoreApi, mockCustomApi, mockReadNamespacedSecret, mockCreateNamespacedSecret, mockReplaceNamespacedSecret, mockReadNamespace } = vi.hoisted(() => {
+  const coreApi = {
+    readNamespacedSecret: vi.fn(),
+    createNamespacedSecret: vi.fn(),
+    replaceNamespacedSecret: vi.fn(),
+    readNamespace: vi.fn().mockResolvedValue({ metadata: { uid: 'mock-cluster-id' } })
+  };
+  const customApi = {};
+  return { 
+    mockCoreApi: coreApi, 
+    mockCustomApi: customApi,
+    mockReadNamespacedSecret: coreApi.readNamespacedSecret,
+    mockCreateNamespacedSecret: coreApi.createNamespacedSecret,
+    mockReplaceNamespacedSecret: coreApi.replaceNamespacedSecret,
+    mockReadNamespace: coreApi.readNamespace
+  };
+});
 
 vi.mock('@kubernetes/client-node', () => {
   return {
     KubeConfig: class {
       loadFromDefault = vi.fn();
-      makeApiClient = vi.fn().mockImplementation(() => ({
-        readNamespacedSecret: mockReadNamespacedSecret,
-        createNamespacedSecret: mockCreateNamespacedSecret,
-        replaceNamespacedSecret: mockReplaceNamespacedSecret,
-        readNamespace: vi.fn().mockResolvedValue({ metadata: { uid: 'mock-cluster-id' } }),
-      }));
+      makeApiClient = vi.fn().mockImplementation((apiClass) => {
+        if (apiClass.name === 'CoreV1Api') return mockCoreApi;
+        if (apiClass.name === 'CustomObjectsApi') return mockCustomApi;
+        return {};
+      });
     },
-    CoreV1Api: class {},
-    CustomObjectsApi: class {},
+    CoreV1Api: class { static name = 'CoreV1Api'; },
+    CustomObjectsApi: class { static name = 'CustomObjectsApi'; },
   };
 });
 
@@ -29,6 +40,7 @@ vi.mock('axios');
 describe('Agent Identity Persistence (Kubernetes Secrets)', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    mockReadNamespace.mockResolvedValue({ metadata: { uid: 'mock-cluster-id' } });
   });
 
   it('should successfully load persistent identity from cluster Secret', async () => {
