@@ -173,36 +173,25 @@ async function autoExposeGameServer(gs: any) {
     }
 
     const cmNamespace = 'ingress-nginx';
+    const cmName = protocol === 'TCP' ? 'tcp-services' : 'udp-services';
     
-    // Read both ConfigMaps to avoid port collisions across protocols
-    const tcpCmRes: any = await coreApi.readNamespacedConfigMap({ name: 'tcp-services', namespace: cmNamespace });
-    const udpCmRes: any = await coreApi.readNamespacedConfigMap({ name: 'udp-services', namespace: cmNamespace });
+    // Read the ConfigMap
+    const cmRes: any = await coreApi.readNamespacedConfigMap({ name: cmName, namespace: cmNamespace });
+    const cm = cmRes.body || cmRes;
+    const data = cm.data || {};
     
-    const tcpData = (tcpCmRes.body || tcpCmRes).data || {};
-    const udpData = (udpCmRes.body || udpCmRes).data || {};
-    
-    const currentCmName = protocol === 'TCP' ? 'tcp-services' : 'udp-services';
-    const currentData = protocol === 'TCP' ? tcpData : udpData;
-    const currentCm = protocol === 'TCP' ? (tcpCmRes.body || tcpCmRes) : (udpCmRes.body || udpCmRes);
-
     const entry = `${ns}/${internalSvcName}:${containerPort}`;
-    let proxyPort = Object.keys(currentData).find(p => currentData[p] === entry);
+    let proxyPort = Object.keys(data).find(p => data[p] === entry);
     
     if (!proxyPort) {
-      // Allocate a new port (30000-31000) that is free in BOTH ConfigMaps
-      const allTakenPorts = new Set([...Object.keys(tcpData), ...Object.keys(udpData)]);
+      // Allocate a new port (30000-31000)
       let p = 30000;
-      while (allTakenPorts.has(String(p))) p++;
+      while (data[String(p)]) p++;
       proxyPort = String(p);
+      data[proxyPort] = entry;
       
-      currentData[proxyPort] = entry;
-      
-      await coreApi.replaceNamespacedConfigMap({ 
-        name: currentCmName, 
-        namespace: cmNamespace, 
-        body: { ...currentCm, data: currentData } 
-      });
-      console.info(`[Monitor] Updated NGINX ${currentCmName} with port ${proxyPort}`);
+      await coreApi.replaceNamespacedConfigMap({ name: cmName, namespace: cmNamespace, body: { ...cm, data } });
+      console.info(`[Monitor] Updated NGINX ${cmName} with port ${proxyPort}`);
     }
 
     // Patch NGINX Service to expose the port
@@ -210,9 +199,9 @@ async function autoExposeGameServer(gs: any) {
     const nginxSvc = nginxSvcRes.body || nginxSvcRes;
     const ports = nginxSvc.spec?.ports || [];
     
-    if (!ports.find((p: any) => p.port === Number(proxyPort) && p.protocol === protocol)) {
+    if (!ports.find((p: any) => p.port === Number(proxyPort))) {
       ports.push({
-        name: `game-${proxyPort}-${protocol.toLowerCase()}`,
+        name: `game-${proxyPort}`,
         port: Number(proxyPort),
         targetPort: Number(proxyPort),
         protocol: protocol as any
@@ -225,7 +214,7 @@ async function autoExposeGameServer(gs: any) {
         namespace: cmNamespace,
         body: nginxSvc
       });
-      console.info(`[Monitor] Exposed port ${proxyPort}/${protocol} on NGINX service`);
+      console.info(`[Monitor] Exposed port ${proxyPort} on NGINX service`);
     }
 
     // Replace GameServer to update annotations
@@ -238,10 +227,8 @@ async function autoExposeGameServer(gs: any) {
     });
     const gsObj = gsRes.body || gsRes;
     
-    const exposureAddr = await getStrategicExposureAddress();
-    
     gsObj.metadata.annotations = gsObj.metadata.annotations || {};
-    gsObj.metadata.annotations['chariot.dev/proxy-address'] = `${exposureAddr}:${proxyPort}`;
+    gsObj.metadata.annotations['chariot.dev/proxy-address'] = `localhost:${proxyPort}`;
     gsObj.metadata.annotations['chariot.dev/stable-port'] = proxyPort.toString();
 
     await customObjectsApi.replaceNamespacedCustomObject({
@@ -253,52 +240,10 @@ async function autoExposeGameServer(gs: any) {
       body: gsObj
     });
 
-    console.info(`[Monitor] GameServer "${name}" reachable via stable proxy at ${exposureAddr}:${proxyPort}`);
+    console.info(`[Monitor] GameServer "${name}" reachable via stable proxy at localhost:${proxyPort}`);
   } catch (err: any) {
     console.error(`[Monitor] Failed to auto-expose ${name}:`, err.response?.body?.message || err.message);
   }
-}
-
-/**
- * Resolves the "Strategic Exposure Address" for the cluster.
- * 1. Checks for CHARIOT_PUBLIC_DOMAIN env var.
- * 2. Attempts to fetch the External IP/Hostname of the ingress-nginx-controller.
- * 3. Falls back to the first available ExternalIP of a Node.
- * 4. Defaults to localhost for development environments.
- */
-export async function getStrategicExposureAddress(): Promise<string> {
-  const publicDomain = process.env.CHARIOT_PUBLIC_DOMAIN;
-  if (publicDomain) return publicDomain;
-
-  try {
-    const cmNamespace = 'ingress-nginx';
-    const nginxSvcRes: any = await coreApi.readNamespacedService({ name: 'ingress-nginx-controller', namespace: cmNamespace });
-    const nginxSvc = nginxSvcRes.body || nginxSvcRes;
-    
-    // Check LoadBalancer status (Cloud Providers)
-    const ingress = nginxSvc.status?.loadBalancer?.ingress?.[0];
-    if (ingress) {
-      if (ingress.hostname) return ingress.hostname;
-      if (ingress.ip) return ingress.ip;
-    }
-
-    // Fallback to Node External IP
-    const nodes = await coreApi.listNode();
-    for (const node of nodes.items) {
-      const extAddr = node.status?.addresses?.find(a => a.type === 'ExternalIP')?.address;
-      if (extAddr) return extAddr;
-    }
-    
-    // Internal Cluster DNS if requested (though less useful for external players)
-    if (process.env.USE_CLUSTER_DNS === 'true') {
-        return `ingress-nginx-controller.${cmNamespace}.svc.cluster.local`;
-    }
-
-  } catch (e) {
-    console.debug('[Monitor] Strategic IP discovery: Falling back to localhost (Controller not found or RBAC restricted)');
-  }
-
-  return process.env.AGENT_IP || 'localhost';
 }
 
 export interface ClusterCapacity {
@@ -331,7 +276,6 @@ export interface ServerStatus {
  * Retrieves the unique UID of the kube-system namespace as a cluster fingerprint.
  */
 export async function getClusterFingerprint(): Promise<string> {
-  if (isMockMode) return 'mock-cluster-uid';
   try {
     const ns = await coreApi.readNamespace({ name: 'kube-system' });
     return ns.metadata?.uid || 'unknown-cluster-uid';
@@ -346,9 +290,6 @@ export async function getClusterFingerprint(): Promise<string> {
  * Scans all nodes and running pods across all namespaces.
  */
 export async function getClusterCapacity(): Promise<ClusterCapacity> {
-  if (isMockMode) {
-    return { cpuTotal: 16, cpuUsed: 4, ramTotal: 32, ramUsed: 8 };
-  }
   let cpuTotal = 0;
   let ramTotal = 0; // Unit: GiB
   let cpuUsed = 0;
@@ -396,11 +337,6 @@ export async function getClusterCapacity(): Promise<ClusterCapacity> {
  * Discovers and summarizes Agones fleet health within specified namespaces.
  */
 export async function getAgonesFleetSummary(targetNamespaces: string[]): Promise<FleetSummary[]> {
-  if (isMockMode) {
-    return [
-      { name: 'minecraft-1-21-1', replicas: 1, readyReplicas: 1, allocatedReplicas: 0 }
-    ];
-  }
   const summarizedFleets: FleetSummary[] = [];
   
   try {

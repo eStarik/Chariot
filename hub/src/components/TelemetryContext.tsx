@@ -30,6 +30,11 @@ export interface AgentRecord {
     state: string;
     address: string;
     port: number;
+    usage?: {
+      cpu: string;
+      memory: string;
+      storage?: string;
+    };
   }>;
 }
 

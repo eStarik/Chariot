@@ -6,6 +6,6 @@ export default defineConfig({
   schema: './src/lib/db/schema.ts',
   dialect: 'postgresql',
   dbCredentials: {
-    url: process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/chariot',
+    url: process.env.DATABASE_URL || 'postgres://postgres:mysecretpassword@localhost:5432/chariot',
   },
 });

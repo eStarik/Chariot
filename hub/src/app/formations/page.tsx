@@ -88,10 +88,11 @@ function extractMetadata(yamlStr: string) {
       description: annotations?.description || '',
       cpu: container?.resources?.requests?.cpu || '1',
       memory: container?.resources?.requests?.memory || '1Gi',
+      storage: container?.resources?.requests?.storage || '0Gi',
       tickrate: annotations?.tickrate || '60Hz',
     };
   } catch {
-    return { name: 'Unknown', version: '1.0', description: '', cpu: '1', memory: '1Gi', tickrate: '60Hz' };
+    return { name: 'Unknown', version: '1.0', description: '', cpu: '1', memory: '1Gi', storage: '0Gi', tickrate: '60Hz' };
   }
 }
 
@@ -136,6 +137,7 @@ const FormationCard = ({ formation, onEdit }: {
         <div className="flex gap-4 mb-6" style={{ fontSize: '0.8rem', color: 'var(--accent-bronze-dark)', fontWeight: 'bold' }}>
           <span>CPU: {formation.cpu}</span>
           <span>RAM: {formation.memory}</span>
+          <span>DISK: {formation.storage}</span>
           <span>TICK: {formation.tickrate}</span>
         </div>
     </div>
@@ -260,10 +262,11 @@ export default function FormationsPage() {
       {/* Top Bar */}
       <div className="top-bar">
         <div className="flex items-center gap-4">
-          <label style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
+          <label htmlFor="agent-registry-select" style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
             Target Legion:
           </label>
           <select
+            id="agent-registry-select"
             style={{ backgroundColor: 'var(--bg-input)', color: 'var(--accent-bronze)', border: '1px solid var(--accent-bronze-dark)', padding: '0.5rem 1rem', fontFamily: 'Georgia, serif', fontSize: '1rem', textTransform: 'uppercase', outline: 'none', cursor: 'pointer' }}
             value={activeAgentId || ''}
             onChange={(e) => setActiveAgentId(e.target.value)}
@@ -273,7 +276,7 @@ export default function FormationsPage() {
             ) : (
               Object.values(agents).map(a => (
                 <option key={a.agent_id} value={a.agent_id}>
-                  {a.metadata.clusterName || a.agent_id}
+                  {(a.metadata && a.metadata.clusterName) || a.agent_id}
                 </option>
               ))
             )}

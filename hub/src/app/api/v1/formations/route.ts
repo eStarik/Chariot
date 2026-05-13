@@ -7,8 +7,9 @@ export async function GET() {
   try {
     const allFormations = await db.select().from(formations);
     return NextResponse.json({ success: true, formations: allFormations });
-  } catch (error) {
-    return NextResponse.json({ success: false, error: 'Failed to fetch formations' }, { status: 500 });
+  } catch (error: any) {
+    console.error("[Formations API] GET Error:", error);
+    return NextResponse.json({ success: false, error: 'Failed to fetch formations', detail: error.message }, { status: 500 });
   }
 }
 
@@ -22,6 +23,7 @@ export async function POST(request: Request) {
       description: body.description,
       cpu: body.cpu,
       memory: body.memory,
+      storage: body.storage || '0Gi',
       tickrate: body.tickrate,
       yaml_config: body.yaml_config,
     };

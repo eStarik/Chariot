@@ -15,6 +15,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       description: body.description,
       cpu: body.cpu,
       memory: body.memory,
+      storage: body.storage || '0Gi',
       tickrate: body.tickrate,
       yaml_config: body.yaml_config,
     };

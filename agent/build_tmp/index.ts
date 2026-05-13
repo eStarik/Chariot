@@ -64,8 +64,10 @@ async function startAgent() {
         servers
       };
 
+      console.info(`[Telemetry] Preparing report for Hub...`);
       const ingestionResult = await pushReportToHub(HUB_URL, agentId!, agentToken!, telemetryReport);
-      
+      console.info(`[Telemetry] Hub interaction completed. Success: ${ingestionResult.success}`);
+
       if (ingestionResult.success) {
         if (ingestionResult.commands && ingestionResult.commands.length > 0) {
           console.info(`[Commands] RECEIVED ${ingestionResult.commands.length} instructions from Hub at ${new Date().toISOString()}`);

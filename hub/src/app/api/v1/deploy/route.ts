@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { formations } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { enqueueCommand } from '@/lib/commands';
+import YAML from 'yaml';
 
 /**
  * Deployment Trigger Endpoint
@@ -27,11 +28,25 @@ export async function POST(request: NextRequest) {
 
     const formation = result[0];
 
-    // 2. Enqueue a deployment command for the target agent
+    // 2. Inject Namespace for Isolation
+    let finalYaml = formation.yaml_config;
+    try {
+      const parsed = YAML.parse(formation.yaml_config);
+      if (parsed && typeof parsed === 'object') {
+        if (!parsed.metadata) parsed.metadata = {};
+        parsed.metadata.namespace = 'chariot-hoplites';
+        finalYaml = YAML.stringify(parsed);
+      }
+    } catch (e) {
+      console.warn('[Deploy] YAML parsing failed during namespace injection, falling back to raw YAML.');
+    }
+
+    // 3. Enqueue a deployment command for the target agent
+    console.info(`[Deploy] API Triggered: Enqueuing "${formation.name}" for agent ${agentId} into namespace chariot-hoplites`);
     const commandId = enqueueCommand(agentId, 'DEPLOY_FORMATION', {
       formationId: formation.id,
       name: formation.name,
-      yaml: formation.yaml_config
+      yaml: finalYaml
     });
 
     return NextResponse.json({ 

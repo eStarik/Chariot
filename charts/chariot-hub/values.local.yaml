@@ -2,7 +2,7 @@
 # Usage: helm install chariot-hub ./charts/chariot-hub -f ./charts/chariot-hub/values.yaml -f ./charts/chariot-hub/values.local.yaml
 
 image:
-  pullPolicy: Always
+  pullPolicy: IfNotPresent
   tag: "latest"
 
 service:

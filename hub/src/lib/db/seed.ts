@@ -1,7 +1,6 @@
 import { db } from './index';
 import { formations, users } from './schema';
 import { v4 as uuidv4 } from 'uuid';
-import bcrypt from 'bcryptjs';
 
 export async function seedDatabase() {
   try {
@@ -9,7 +8,7 @@ export async function seedDatabase() {
     const existingFormations = await db.select().from(formations);
     
     if (existingFormations.length === 0) {
-      console.log('[DB] First-run detected. Seeding CS2 and Minecraft GameServer templates...');
+      console.log('[DB] First-run detected. Seeding tactical server templates...');
       
       const cs2 = {
         id: uuidv4(),
@@ -75,7 +74,80 @@ spec:
             cpu: "0.1"`
       };
 
-      await db.insert(formations).values([cs2, mc]);
+      const tactical = {
+        id: uuidv4(),
+        name: 'Standard Tactical Unit',
+        version: '1.0',
+        description: 'Lightweight Agones simple game server for tactical verification.',
+        cpu: '100m',
+        memory: '128Mi',
+        tickrate: '20Hz',
+        yaml_config: `apiVersion: "agones.dev/v1"
+kind: GameServer
+metadata:
+  name: tactical-unit
+  namespace: chariot-hoplites
+  labels:
+    chariot.tactical/formation: "standard"
+spec:
+  ports:
+  - name: default
+    containerPort: 7654
+  template:
+    spec:
+      containers:
+      - name: game-server
+        image: "us-docker.pkg.dev/agones-images/examples/simple-game-server:0.34"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"`
+      };
+
+      const mc_java_1211 = {
+        id: uuidv4(),
+        name: 'Minecraft Java 1.21.1',
+        version: '1.21.1',
+        description: 'Minecraft Java Edition 1.21.1 dedicated server.',
+        cpu: '1',
+        memory: '4Gi',
+        tickrate: '20Hz',
+        yaml_config: `apiVersion: "agones.dev/v1"
+kind: GameServer
+metadata:
+  generateName: mc-java-1-21-1-
+  labels:
+    chariot.tactical/formation: "mc-java"
+spec:
+  ports:
+  - name: default
+    containerPort: 25565
+    protocol: TCP
+  template:
+    spec:
+      containers:
+      - name: mc-server
+        image: "itzg/minecraft-server"
+        env:
+        - name: EULA
+          value: "TRUE"
+        - name: VERSION
+          value: "1.21.1"
+        - name: TYPE
+          value: "VANILLA"
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "0.5"
+          limits:
+            memory: "4Gi"
+            cpu: "1"`
+      };
+
+      await db.insert(formations).values([cs2, mc, tactical, mc_java_1211]);
       console.log('[DB] Successfully seeded GameServer templates.');
     }
 

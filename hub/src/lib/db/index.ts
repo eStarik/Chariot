@@ -13,7 +13,7 @@ function getConnectionString(): string {
   if (process.env.NODE_ENV === 'production') {
     console.warn('[DB] WARNING: DATABASE_URL is not defined in production. Using fallback.');
   }
-  return 'postgres://postgres:postgres@localhost:5432/chariot';
+  return 'postgres://postgres:mysecretpassword@localhost:5432/chariot';
 }
 
 const connectionString = getConnectionString();

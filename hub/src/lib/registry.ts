@@ -24,6 +24,11 @@ export interface ServerStatus {
   state: string;
   address: string;
   port: number;
+  usage?: {
+    cpu: string;
+    memory: string;
+    storage: string;
+  };
 }
 
 export interface ClusterReport {
@@ -147,7 +152,7 @@ export async function getAgentByFingerprint(fingerprint: string): Promise<AgentR
  */
 export async function saveClusterReport(
   agentId: string, 
-  report: ClusterReport, 
+  report: Partial<ClusterReport>, 
   agentToken: string
 ): Promise<{ success: boolean; error?: string }> {
   const agent = await getAgent(agentId);
@@ -161,13 +166,16 @@ export async function saveClusterReport(
     return { success: false, error: 'Security violation: Unauthorized agent token' };
   }
 
-  await db.update(agents).set({
+  const updatePayload: any = {
     last_report_at: new Date(),
     status: 'connected',
-    resources: JSON.stringify(report.resources),
-    fleets: JSON.stringify(report.fleets),
-    servers: JSON.stringify(report.servers || []),
-  }).where(eq(agents.id, agentId));
+  };
+
+  if (report.resources) updatePayload.resources = JSON.stringify(report.resources);
+  if (report.fleets) updatePayload.fleets = JSON.stringify(report.fleets);
+  if (report.servers) updatePayload.servers = JSON.stringify(report.servers);
+
+  await db.update(agents).set(updatePayload).where(eq(agents.id, agentId));
 
   return { success: true };
 }

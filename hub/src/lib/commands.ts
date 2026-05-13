@@ -10,8 +10,12 @@ export interface AgentCommand {
   timestamp: number;
 }
 
-// In-memory registry of pending commands per Agent ID
-const commandStore: Record<string, AgentCommand[]> = {};
+// In-memory registry of pending commands per Agent ID.
+// Using a global variable to ensure it persists between Next.js dev reloads/requests.
+const globalForCommands = global as unknown as { commandStore: Record<string, AgentCommand[]> | undefined };
+const commandStore = globalForCommands.commandStore ?? {};
+
+if (process.env.NODE_ENV !== 'production') globalForCommands.commandStore = commandStore;
 
 /**
  * Enqueues a command for a specific Agent.

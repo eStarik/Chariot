@@ -9,6 +9,7 @@ export const formations = pgTable('formations', {
   description: text('description').notNull(),
   cpu: text('cpu').notNull(), // e.g., "2 Cores"
   memory: text('memory').notNull(), // e.g., "4 GiB"
+  storage: text('storage').notNull().default('0Gi'), // e.g., "10 GiB"
   tickrate: text('tickrate').notNull(), // e.g., "30Hz"
   yaml_config: text('yaml_config').notNull(),
   is_restricted: boolean('is_restricted').default(false),

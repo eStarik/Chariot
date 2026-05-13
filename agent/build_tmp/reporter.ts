@@ -35,20 +35,9 @@ export interface ReportResult {
   commands?: any[];
 }
 
-let stateCache: ClusterReport | null = null;
-
-/**
- * Deep equality helper for telemetry objects.
- */
-function isDeepEqual(obj1: any, obj2: any): boolean {
-  if (obj1 === obj2) return true;
-  if (!obj1 || !obj2) return false;
-  return JSON.stringify(obj1) === JSON.stringify(obj2);
-}
-
 /**
  * Pushes validated cluster telemetry to the Chariot Hub.
- * Implements differential reporting to minimize bandwidth.
+ * Handles authentication headers and structured error recovery.
  */
 export async function pushReportToHub(
   hubUrl: string, 
@@ -56,46 +45,17 @@ export async function pushReportToHub(
   agentToken: string, 
   telemetryPayload: ClusterReport
 ): Promise<ReportResult> {
-  // Construct the differential payload
-  const diffPayload: Partial<ClusterReport> = {};
-  let hasChanges = false;
-
-  if (!stateCache || !isDeepEqual(stateCache.resources, telemetryPayload.resources)) {
-    diffPayload.resources = telemetryPayload.resources;
-    hasChanges = true;
-  }
-
-  if (!stateCache || !isDeepEqual(stateCache.fleets, telemetryPayload.fleets)) {
-    diffPayload.fleets = telemetryPayload.fleets;
-    hasChanges = true;
-  }
-
-  if (!stateCache || !isDeepEqual(stateCache.servers, telemetryPayload.servers)) {
-    diffPayload.servers = telemetryPayload.servers || [];
-    hasChanges = true;
-  }
-
-  // If no changes, we still push an empty object as a heartbeat to update 'last_report_at'
-  const finalPayload = hasChanges ? diffPayload : {};
-
-  if (!hasChanges) {
-    console.info(`[Reporter] Sending heartbeat (no telemetry changes)`);
-  } else {
-    console.info(`[Reporter] Pushing differential telemetry to Hub: ${hubUrl}/api/v1/report`);
-  }
-
+  console.info(`[Reporter] Pushing telemetry to Hub: ${hubUrl}/api/v1/report`);
   try {
-    const hubResponse = await axios.post(`${hubUrl}/api/v1/report`, finalPayload, {
+    const hubResponse = await axios.post(`${hubUrl}/api/v1/report`, telemetryPayload, {
       headers: {
         'X-Agent-ID': agentId,
         'X-Agent-Token': agentToken
       },
-      timeout: 5000 
+      timeout: 5000 // 5s timeout for reporting
     });
 
     if (hubResponse.status === 200) {
-      // Update cache on success
-      stateCache = JSON.parse(JSON.stringify(telemetryPayload));
       return { 
         success: true, 
         commands: hubResponse.data?.commands || [] 
@@ -115,4 +75,3 @@ export async function pushReportToHub(
     return { success: false, error: `Network or internal error: ${error.message}` };
   }
 }
-

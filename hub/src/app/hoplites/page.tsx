@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useTelemetry } from '@/components/TelemetryContext';
+import { TerminalConsole } from '@/components/TerminalConsole';
 
 // --- Click-to-Copy Component ---
 const CopyText = ({ text }: { text: string }) => {
@@ -34,6 +35,81 @@ const CopyText = ({ text }: { text: string }) => {
   );
 };
 
+// --- Log Terminal Modal ---
+const LogTerminal = ({ gsName, onClose }: { gsName: string; onClose: () => void }) => {
+  const [logs, setLogs] = useState<string[]>([]);
+  const [isConnecting, setIsConnecting] = useState(true);
+  const logEndRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    
+    const readLogs = async () => {
+      try {
+        const response = await fetch(`/api/v1/hoplites/${gsName}/logs`);
+        if (!isMounted) return;
+        setIsConnecting(false);
+        
+        const reader = response.body?.getReader();
+        if (!reader) return;
+
+        const decoder = new TextDecoder();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done || !isMounted) break;
+          const text = decoder.decode(value);
+          setLogs(prev => [...prev, ...text.split('\n').filter(l => l.trim())]);
+        }
+      } catch (e) {
+        if (isMounted) setLogs(prev => [...prev, `[ERROR] Link Failure: Unable to establish telemetry stream.`]);
+      }
+    };
+
+    readLogs();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [gsName]);
+
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [logs]);
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem', backdropFilter: 'blur(8px)' }}>
+      <div style={{ width: '100%', maxWidth: '950px', height: '80vh', backgroundColor: '#0a0a0a', border: '1px solid var(--accent-bronze)', display: 'flex', flexDirection: 'column', boxShadow: '0 0 60px rgba(0,0,0,1)' }}>
+        <div style={{ padding: '0.85rem 1.5rem', borderBottom: '1px solid var(--accent-bronze-dark)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(to right, #1a1a1a, #0a0a0a)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+             <div style={{ width: '8px', height: '8px', backgroundColor: isConnecting ? '#9b111e' : '#2ecc71', borderRadius: '50%', boxShadow: isConnecting ? 'none' : '0 0 10px #2ecc71' }}></div>
+             <span style={{ fontSize: '0.75rem', fontWeight: 'bold', letterSpacing: '2px', color: 'var(--accent-bronze)', textTransform: 'uppercase' }}>
+               Live Tactical Stream // {gsName}
+             </span>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--accent-bronze)', cursor: 'pointer', fontSize: '1.5rem', lineHeight: 1 }}>&times;</button>
+        </div>
+        <div style={{ flex: 1, padding: '1.5rem', overflowY: 'auto', fontFamily: '"Fira Code", monospace', fontSize: '0.85rem', color: '#d4d4d4', lineHeight: '1.6' }}>
+          {isConnecting && (
+            <div style={{ color: 'var(--accent-bronze)', textTransform: 'uppercase', letterSpacing: '1px' }}>
+              <span className="animate-pulse">Attempting to establish secure handshake with Legionary Agent...</span>
+            </div>
+          )}
+          {logs.map((log, i) => (
+            <div key={i} style={{ marginBottom: '4px', display: 'flex', gap: '12px' }}>
+              <span style={{ color: 'var(--accent-bronze-dark)', fontSize: '0.7rem', minWidth: '40px' }}>{i.toString().padStart(4, '0')}</span>
+              <span style={{ color: log.includes('ERROR') ? 'var(--accent-red)' : '#e0e0e0' }}>{log}</span>
+            </div>
+          ))}
+          <div ref={logEndRef} />
+        </div>
+        <div style={{ padding: '0.5rem 1rem', borderTop: '1px solid #222', background: '#0a0a0a', display: 'flex', justifyContent: 'flex-end' }}>
+           <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Stream Status: {isConnecting ? 'Connecting' : 'Active'}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // --- Hoplites View ---
 
 export default function HoplitesPage() {
@@ -45,6 +121,8 @@ export default function HoplitesPage() {
   const [isDeploying, setIsDeploying] = useState(false);
   const [deployError, setDeployError] = useState('');
   const [deploySuccess, setDeploySuccess] = useState('');
+  const [activeLogGs, setActiveLogGs] = useState<string | null>(null);
+  const [activeTerminalGs, setActiveTerminalGs] = useState<string | null>(null);
 
   // Auto-clear success message
   useEffect(() => {
@@ -110,7 +188,9 @@ export default function HoplitesPage() {
       statusClass: fleet.allocatedReplicas > 0 ? 'badge-combat' : 'badge-idle',
       performance: `${fleet.allocatedReplicas} / ${fleet.readyReplicas} ALLO`,
       agentId: activeAgent.agent_id,
-      clusterName: activeAgent.metadata.clusterName || activeAgent.agent_id
+      clusterName: (activeAgent.metadata && activeAgent.metadata.clusterName) || activeAgent.agent_id,
+      usage: { cpu: 'N/A', memory: 'N/A', storage: 'N/A' },
+      state: fleet.allocatedReplicas > 0 ? 'Allocated' : 'Ready'
     })),
     ...(activeAgent.servers || []).map(server => {
       const isProvisioning = server.state === 'Unhealthy' || server.state === 'Scheduled';
@@ -121,8 +201,9 @@ export default function HoplitesPage() {
         displayStatus: server.state === 'Allocated' ? 'In Combat' : isProvisioning ? 'Provisioning' : server.state,
         statusClass: server.state === 'Allocated' ? 'badge-combat' : server.state === 'Ready' ? 'badge-ready' : isProvisioning ? 'badge-idle' : 'badge-idle',
         performance: isProvisioning ? 'FETCHING ASSETS...' : (server.address ? `${server.address}:${server.port}` : 'CONNECTING...'),
+        usage: server.usage || { cpu: '...', memory: '...', storage: '...' },
         agentId: activeAgent.agent_id,
-        clusterName: activeAgent.metadata.clusterName || activeAgent.agent_id
+        clusterName: (activeAgent.metadata && activeAgent.metadata.clusterName) || activeAgent.agent_id
       };
     })
   ] : [];
@@ -137,10 +218,11 @@ export default function HoplitesPage() {
       <div className="top-bar" style={{ padding: '0 2.5rem' }}>
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-4">
-            <label style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
+            <label htmlFor="agent-select" style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
               Target Legion:
             </label>
             <select
+              id="agent-select"
               style={{ backgroundColor: 'var(--bg-input)', color: 'var(--accent-bronze)', border: '1px solid var(--accent-bronze-dark)', padding: '0.5rem 1rem', fontFamily: 'Georgia, serif', fontSize: '1rem', textTransform: 'uppercase', outline: 'none', cursor: 'pointer' }}
               value={activeAgentId || ''}
               onChange={(e) => setActiveAgentId(e.target.value)}
@@ -150,7 +232,7 @@ export default function HoplitesPage() {
               ) : (
                 Object.values(agents).map(a => (
                   <option key={a.agent_id} value={a.agent_id}>
-                    {a.metadata.clusterName || a.agent_id}
+                    {(a.metadata && a.metadata.clusterName) || a.agent_id}
                   </option>
                 ))
               )}
@@ -211,7 +293,7 @@ export default function HoplitesPage() {
         <div className="section-header">
           <h2>Active Hoplites</h2>
           <span className="text-muted" style={{ fontSize: '0.9rem' }}>
-            {activeAgent ? `Tactical units under Legion ${activeAgent.metadata.clusterName || activeAgent.agent_id}` : 'Handshake Pending'}
+            {activeAgent ? `Tactical units under Legion ${(activeAgent.metadata && activeAgent.metadata.clusterName) || activeAgent.agent_id}` : 'Handshake Pending'}
           </span>
         </div>
 
@@ -228,7 +310,10 @@ export default function HoplitesPage() {
                 <th>Formation / Host</th>
                 <th>Status</th>
                 <th>Performance</th>
-                <th>Uptime</th>
+                <th style={{ textAlign: 'center' }}>CPU</th>
+                <th style={{ textAlign: 'center' }}>RAM</th>
+                <th style={{ textAlign: 'center' }}>DISK</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -262,7 +347,53 @@ export default function HoplitesPage() {
                     <td className="font-mono text-bronze" style={{ fontSize: '0.8rem' }}>
                       {h.performance}
                     </td>
-                    <td className="text-muted" style={{ fontSize: '0.8rem' }}>4h 12m</td>
+                    <td style={{ textAlign: 'center' }}>
+                       <span style={{ fontSize: '0.8rem', color: 'var(--accent-bronze)', fontFamily: 'monospace' }}>
+                          {h.usage?.cpu || '0m'}
+                       </span>
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                       <span style={{ fontSize: '0.8rem', color: 'var(--accent-bronze)', fontFamily: 'monospace' }}>
+                          {h.usage?.memory || '0Mi'}
+                       </span>
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                       <span style={{ fontSize: '0.8rem', color: 'var(--accent-bronze)', fontFamily: 'monospace' }}>
+                          {h.usage?.storage || 'N/A'}
+                       </span>
+                    </td>
+                    <td>
+                       <div className="flex gap-2 justify-center">
+                        <button 
+                          onClick={() => setActiveLogGs(h.name)}
+                          style={{ background: 'none', border: '1px solid rgba(176, 141, 87, 0.3)', color: 'var(--accent-bronze)', padding: '4px 8px', fontSize: '10px', textTransform: 'uppercase', cursor: 'pointer' }}
+                          onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--accent-bronze)')}
+                          onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'rgba(176, 141, 87, 0.3)')}
+                        >
+                          Logs
+                        </button>
+                        <button 
+                          onClick={() => setActiveTerminalGs(h.name)}
+                          disabled={h.state !== 'Allocated' && h.state !== 'Ready'}
+                          style={{ 
+                            background: 'none', 
+                            border: '1px solid rgba(176, 141, 87, 0.3)', 
+                            color: 'var(--accent-bronze)', 
+                            padding: '4px 8px', 
+                            fontSize: '10px', 
+                            textTransform: 'uppercase', 
+                            cursor: (h.state === 'Allocated' || h.state === 'Ready') ? 'pointer' : 'not-allowed',
+                            opacity: (h.state === 'Allocated' || h.state === 'Ready') ? 1 : 0.4
+                          }}
+                          onMouseEnter={(e) => {
+                            if (h.state === 'Allocated' || h.state === 'Ready') e.currentTarget.style.borderColor = 'var(--accent-bronze)';
+                          }}
+                          onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'rgba(176, 141, 87, 0.3)')}
+                        >
+                          Console
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))
               )}
@@ -270,6 +401,43 @@ export default function HoplitesPage() {
           </table>
         )}
       </div>
+
+      {/* Log Modal */}
+      {activeLogGs && (
+        <LogTerminal gsName={activeLogGs} onClose={() => setActiveLogGs(null)} />
+      )}
+
+      {/* Terminal Modal */}
+      {activeTerminalGs && activeAgent && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem', backdropFilter: 'blur(8px)' }}>
+          <div style={{ width: '100%', maxWidth: '1000px', height: '80vh', backgroundColor: '#0a0a0a', border: '1px solid var(--accent-bronze)', display: 'flex', flexDirection: 'column', boxShadow: '0 0 60px rgba(0,0,0,1)' }}>
+            <div style={{ padding: '0.85rem 1.5rem', borderBottom: '1px solid var(--accent-bronze-dark)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(to right, #1a1a1a, #0a0a0a)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 'bold', letterSpacing: '2px', color: 'var(--accent-bronze)', textTransform: 'uppercase' }}>
+                  Interactive Terminal // {activeTerminalGs}
+                </span>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>
+                  Connected via Legion Agent // {activeAgent.metadata?.agentUrl || 'LOCAL_BRIDGE'}
+                </span>
+              </div>
+              <button 
+                onClick={() => setActiveTerminalGs(null)} 
+                style={{ background: 'none', border: 'none', color: 'var(--accent-bronze)', cursor: 'pointer', fontSize: '1.5rem', lineHeight: 1 }}
+              >
+                &times;
+              </button>
+            </div>
+            <div style={{ flex: 1, position: 'relative' }}>
+               <TerminalConsole 
+                 podName={activeTerminalGs} 
+                 namespace="chariot-hoplites" 
+                 agentUrl={activeAgent.metadata?.agentUrl || 'http://localhost:3001'} 
+                 onClose={() => setActiveTerminalGs(null)}
+               />
+            </div>
+          </div>
+        </div>
+      )}
       {/* Deployment Modal Overlay */}
       {isDeployModalOpen && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
@@ -279,8 +447,9 @@ export default function HoplitesPage() {
              </h3>
              
              <div className="mb-6">
-                <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Select Formation Template:</label>
+                <label htmlFor="formation-select" style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Select Formation Template:</label>
                 <select 
+                  id="formation-select"
                   style={{ width: '100%', backgroundColor: 'var(--bg-input)', color: 'var(--accent-bronze)', border: '1px solid var(--accent-bronze-dark)', padding: '0.75rem', outline: 'none' }}
                   value={selectedFormationId}
                   onChange={(e) => setSelectedFormationId(e.target.value)}
@@ -291,6 +460,27 @@ export default function HoplitesPage() {
                 </select>
              </div>
 
+             {/* Tactical Specification Visibility */}
+             {selectedFormationId && formations.find(f => f.id === selectedFormationId) && (
+               <div style={{ backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid var(--accent-bronze-dark)', padding: '1rem', marginBottom: '1.5rem', fontSize: '0.8rem' }}>
+                  <div style={{ color: 'var(--text-muted)', textTransform: 'uppercase', fontSize: '0.7rem', marginBottom: '0.75rem', fontWeight: 'bold', letterSpacing: '1px' }}>
+                    Tactical Specification:
+                  </div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span style={{ color: 'var(--text-muted)' }}>CPU Requirement:</span>
+                    <span style={{ color: 'var(--accent-bronze)', fontWeight: 'bold' }}>{formations.find(f => f.id === selectedFormationId).cpu}</span>
+                  </div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span style={{ color: 'var(--text-muted)' }}>Memory Requirement:</span>
+                    <span style={{ color: 'var(--accent-bronze)', fontWeight: 'bold' }}>{formations.find(f => f.id === selectedFormationId).memory}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span style={{ color: 'var(--text-muted)' }}>Storage Allocation:</span>
+                    <span style={{ color: 'var(--accent-bronze)', fontWeight: 'bold' }}>{formations.find(f => f.id === selectedFormationId).storage}</span>
+                  </div>
+               </div>
+             )}
+
              <div className="flex flex-col gap-4">
                 {deployError && (
                   <div style={{ color: 'var(--accent-red)', fontSize: '0.8rem', backgroundColor: 'rgba(155, 17, 30, 0.1)', padding: '0.5rem', border: '1px solid var(--accent-red)' }}>
@@ -299,7 +489,7 @@ export default function HoplitesPage() {
                 )}
                 
                 <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontStyle: 'italic', marginBottom: '1rem' }}>
-                  Deploying to Legion <span style={{ color: 'var(--accent-bronze)' }}>{activeAgent?.metadata?.clusterName || activeAgentId}</span>. This unit will be provisioned immediately.
+                  Deploying to Legion <span style={{ color: 'var(--accent-bronze)' }}>{(activeAgent?.metadata && activeAgent.metadata.clusterName) || activeAgentId}</span>. This unit will be provisioned immediately.
                 </p>
 
                 <div className="flex gap-4">

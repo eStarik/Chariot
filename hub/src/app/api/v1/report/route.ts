@@ -30,9 +30,11 @@ export async function POST(request: NextRequest) {
       broadcastAgentUpdate(agentId, telemetryPayload);
       
       // Fetch any pending commands for this specific agent
-      console.log(`[Telemetry] Flushing commands for ${agentId}...`);
+      console.log(`[Telemetry] Flushing commands for agent: ${agentId}`);
       const commands = flushCommands(agentId);
-      console.log(`[Telemetry] Flushed ${commands.length} commands.`);
+      if (commands.length > 0) {
+        console.log(`[Telemetry] FLUSHED ${commands.length} commands to agent ${agentId}`);
+      }
 
       return NextResponse.json({ 
         status: 'received',

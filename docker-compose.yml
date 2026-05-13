@@ -1,6 +1,17 @@
-version: '3.8'
-
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_PASSWORD=mysecretpassword
+      - POSTGRES_DB=chariot
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - chariot-net
+
   hub:
     build:
       context: ./hub
@@ -8,8 +19,13 @@ services:
     ports:
       - "3000:3000"
     environment:
+      - DATABASE_URL=postgres://postgres:mysecretpassword@db:5432/chariot
       - SHARED_SECRET=chariot-production-secret-2024
       - NODE_ENV=production
+      - AUTH_SECRET=chariot-auth-secret-321
+    depends_on:
+      db:
+        condition: service_healthy
     networks:
       - chariot-net
 
@@ -17,11 +33,18 @@ services:
     build:
       context: ./agent
       dockerfile: Dockerfile
+    volumes:
+      - ${USERPROFILE}/.kube/config:/tmp/kubeconfig:ro
+      - ./agent/start.sh:/app/start.sh:ro
+    entrypoint: ["sh", "/app/start.sh"]
     environment:
       - HUB_URL=http://hub:3000
       - SHARED_SECRET=chariot-production-secret-2024
       - CLUSTER_NAME=docker-desktop-cluster
       - REPORT_INTERVAL=10000
+      - CHARIOT_MOCK_AGONES=false
+      - KUBECONFIG=/root/.kube/config
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
     depends_on:
       - hub
     networks:

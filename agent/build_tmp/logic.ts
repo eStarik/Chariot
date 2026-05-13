@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getClusterFingerprint, getStrategicExposureAddress } from './monitor';
+import { getClusterFingerprint } from './monitor';
 import * as k8s from '@kubernetes/client-node';
 
 const kubeConfig = new k8s.KubeConfig();
@@ -8,7 +8,6 @@ const coreApi = kubeConfig.makeApiClient(k8s.CoreV1Api);
 
 const IDENTITY_SECRET_NAME = 'chariot-agent-identity';
 const DEFAULT_NAMESPACE = process.env.POD_NAMESPACE || 'default';
-const isMockMode = process.env.CHARIOT_MOCK_AGONES === 'true';
 
 export interface HandshakePayload {
   secret: string;
@@ -34,7 +33,6 @@ export interface RegistrationResult {
  * @returns Object containing agent_id and agent_token if successful, otherwise null.
  */
 export async function loadPersistentConfig(): Promise<{ agent_id: string; agent_token: string } | null> {
-  if (isMockMode) return null;
   try {
     const response = await coreApi.readNamespacedSecret({
       name: IDENTITY_SECRET_NAME, 
@@ -61,10 +59,6 @@ export async function loadPersistentConfig(): Promise<{ agent_id: string; agent_
  * @param agentToken The secure access token granted by the Hub.
  */
 async function savePersistentConfig(agentId: string, agentToken: string): Promise<void> {
-  if (isMockMode) {
-    console.info('[Auth] [MOCK] Skipping identity persistence to Kubernetes Secret.');
-    return;
-  }
   const secretData = {
     agent_id: Buffer.from(agentId).toString('base64'),
     agent_token: Buffer.from(agentToken).toString('base64')
@@ -144,14 +138,13 @@ async function savePersistentConfig(agentId: string, agentToken: string): Promis
 export async function registerWithHub(hubUrl: string, secret: string, existingAgentId?: string): Promise<RegistrationResult> {
   try {
     const fingerprint = await getClusterFingerprint();
-    const exposureAddr = await getStrategicExposureAddress();
     const handshakePayload: HandshakePayload = {
       secret,
       fingerprint,
       metadata: {
         clusterName: process.env.CLUSTER_NAME || 'unknown-cluster',
-        agentIp: exposureAddr,
-        agentUrl: `http://${exposureAddr}:${process.env.LOG_SERVER_PORT || '3001'}`
+        agentIp: process.env.AGENT_IP || 'localhost',
+        agentUrl: `http://${process.env.AGENT_IP || 'localhost'}:${process.env.LOG_SERVER_PORT || '3001'}`
       }
     };
 
