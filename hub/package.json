@@ -10,7 +10,7 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@auth/drizzle-adapter": "^1.11.1",
+    "@auth/drizzle-adapter": "^1.11.3",
     "@kubernetes/client-node": "^1.4.0",
     "@types/bcryptjs": "^2.4.6",
     "@xterm/addon-fit": "^0.11.0",
